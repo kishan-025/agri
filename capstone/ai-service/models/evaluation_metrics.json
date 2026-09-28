@@ -1,0 +1,26 @@
+{
+  "pH": {
+    "mean_r2": 0.3305,
+    "std_r2": 0.1274,
+    "mean_rmse": 1.0888,
+    "mean_mae": 0.8961
+  },
+  "Nitrogen": {
+    "mean_r2": 0.0869,
+    "std_r2": 0.0407,
+    "mean_rmse": 3.4723,
+    "mean_mae": 1.9381
+  },
+  "Phosphorus": {
+    "mean_r2": 0.0521,
+    "std_r2": 0.0264,
+    "mean_rmse": 26.1968,
+    "mean_mae": 17.9272
+  },
+  "Potassium": {
+    "mean_r2": 0.0175,
+    "std_r2": 0.0435,
+    "mean_rmse": 204.0428,
+    "mean_mae": 122.7394
+  }
+}

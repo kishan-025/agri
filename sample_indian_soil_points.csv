@@ -1,0 +1,6 @@
+Sample_ID,State,District,Latitude,Longitude,Nitrogen_kg_ha,Phosphorus_kg_ha,Potassium_kg_ha,pH,Organic_Carbon_pct
+IND_01,Andhra Pradesh,Guntur,16.3067,80.4365,190.5,24.2,280.0,7.2,0.55
+IND_02,Karnataka,Mandya,12.5224,76.8974,220.0,18.5,195.0,6.5,0.68
+IND_03,Maharashtra,Nashik,20.0059,73.7898,165.0,14.0,320.0,7.8,0.48
+IND_04,Punjab,Ludhiana,30.9010,75.8573,280.0,32.0,210.0,7.4,0.72
+IND_05,Tamil Nadu,Thanjavur,10.7870,79.1378,210.0,20.0,240.0,6.8,0.62

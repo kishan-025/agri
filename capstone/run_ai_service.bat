@@ -1,0 +1,8 @@
+@echo off
+title Python AI Satellite Microservice (Port 7000)
+cd /d "%~dp0ai-service"
+echo ========================================================
+echo Starting Soil Fertility AI Microservice on Port 7000...
+echo ========================================================
+python -m uvicorn app:app --host 127.0.0.1 --port 7000 --reload
+pause

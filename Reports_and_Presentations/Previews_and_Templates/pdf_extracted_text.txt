@@ -1,0 +1,567 @@
+=== PAGE 1 ===
+AI-Driven Satellite Remote 
+Sensing for Field-Scale Soil 
+Nutrient (NPK) and Health 
+Assessment
+CAPSTONE ENGINEERING PROJECT PROPOSAL (PHASE 1) — Department of 
+Computer Science & Engineering, Academic Year 2025–2026. Project Guide: Dr. 
+Pramod T. C. Team roles: Data Engineering & Satellite Preprocessing Lead; ML & 
+Predictive Modeling Lead; Soil Target Chemistry & Advisory Lead; Spatial GIS 
+Integration & Inference Pipeline Lead.
+Subtitle
+Problem: Farmers and agronomists often lack timely, affordable, field-scale 
+visibility into soil nutrient variability, making it difficult to detect NPK deficiencies 
+early and optimize interventions.
+Key innovation: This project combines satellite imagery, geospatial preprocessing, 
+and machine learning to estimate soil NPK status and broader field health 
+indicators from remote sensing signals.
+Expected impact: The system aims to support faster, data-driven soil management 
+decisions, reduce unnecessary sampling and input use, and improve crop 
+productivity through more precise advisory recommendations.
+
+
+=== PAGE 2 ===
+Why This Matters — The Critical Need for Soil Testing
+Soil Drives 
+Agriculture
+Healthy soil fertility 
+(N, P, K, SOC, pH) 
+directly dictates crop 
+yield, food security, 
+and farm 
+profitability. 
+Precision agriculture 
+shifts practice from 
+blanket fertilization 
+to site-specific 
+variable-rate 
+management.
+Smallholder 
+Constraints
+Less than 15% of 
+farmers regularly 
+test soil due to long 
+turnaround, lab 
+inaccessibility, and 
+per-sample costs—
+creating a pressing 
+need for low-cost, 
+rapid alternatives.
+Economic 
+Impact of Soil 
+Degradation
+Soil nutrient 
+depletion, erosion, 
+and pH imbalance 
+reduce yields, 
+increase fertilizer 
+waste, and raise 
+production costs. 
+Without testing, 
+farmers often 
+overapply inputs in 
+some zones while 
+starving others, 
+directly eroding 
+margins.
+Climate 
+Resilience 
+Through Soil 
+Health
+Well-managed soils 
+retain more 
+moisture, support 
+stronger root 
+systems, and buffer 
+crops against 
+drought, heavy rain, 
+and temperature 
+stress. Soil testing 
+helps protect organic 
+matter and guide 
+practices that 
+improve resilience 
+season after season.
+Precision 
+Agriculture ROI
+Targeted nutrient 
+application improves 
+input efficiency, 
+reduces unnecessary 
+fertilizer spend, and 
+increases yield 
+consistency. Soil 
+testing provides the 
+data foundation 
+needed to make 
+precision agriculture 
+economically viable 
+and measurable.
+
+
+=== PAGE 3 ===
+Proposed Solution — Remote Sensing + Chemometrics 
++ AI
+We combine ESA Copernicus Sentinel-2 multispectral satellite imagery 
+with chemometric feature engineering and AI regression to estimate 
+soil properties without physical sampling at every point. Sentinel-2 is a 
+pair of Earth-observation satellites that capture reflected light across 
+visible, red-edge, near-infrared, and short-wave infrared bands at 10–20 
+m spatial resolution with a 5-day revisit cycle, making it well suited for 
+monitoring field-scale variability over time.
+Chemometrics means extracting quantitative, physically meaningful 
+predictors from spectral data. Instead of using raw pixels alone, we 
+derive indices and band ratios that are sensitive to soil background, 
+moisture, organic matter, and clay/mineral composition. Key features 
+include BSI (Bare Soil Index) to highlight exposed soil, NDRE 
+(Normalized Difference Red Edge) to capture subtle vegetation/soil 
+stress signals where partial cover exists, and Clay Ratio to improve 
+sensitivity to clay-related spectral absorption in SWIR bands.
+The AI layer uses supervised regression models such as XGBoost and 
+LightGBM. These models learn the mapping from spectral features and 
+indices to ground-truth soil chemistry measurements from calibration 
+samples. After training, the model predicts continuous values for 
+nutrients and soil characteristics at unsampled locations, producing 
+high-resolution 2D fertility heatmaps and variable-rate fertilizer 
+dosage schedules delivered through a web GIS interface.
+Sentinel-2 Data
+Multispectral imagery 
+provides repeatable field 
+coverage across visible, red-
+edge, NIR, and SWIR bands 
+for monitoring spatial 
+variability.
+Chemometric 
+Features
+Engineered indices such as 
+BSI, NDRE, and Clay Ratio 
+convert raw reflectance into 
+soil-relevant predictors.
+AI Regression
+XGBoost/LightGBM learn 
+nonlinear relationships 
+between spectral features 
+and laboratory soil 
+measurements.
+Decision Outputs
+Predictions are turned into 
+fertility maps and 
+prescription layers for web-
+based precision agriculture.
+
+
+=== PAGE 4 ===
+Literature Foundations — Data Engineering & Soil 
+Spectroscopy
+Sentinel-2 for Soil 
+Mapping
+Castaldi et al. (2019) 
+and Gholizadeh et al. 
+(2021) show Sentinel-2 
+multispectral fidelity 
+and multi-temporal 
+compositing effectively 
+map topsoil properties 
+and cancel ephemeral 
+noise.
+Spectral Libraries
+Demattê et al. (2018) 
+and Dotto et al. (2018) 
+characterize 
+absorption overtones 
+for clay, organic matter, 
+and moisture; fusing 
+spectral data with 
+terrain/climate 
+improves P and K 
+prediction.
+Soil Moisture 
+Effects on 
+Spectral 
+Signatures
+Recent studies show 
+that moisture strongly 
+suppresses reflectance, 
+especially in the visible 
+and near-infrared, 
+shifting absorption 
+features and reducing 
+the separability of clay, 
+organic matter, and 
+mineral signals. This 
+has led many authors 
+to recommend 
+moisture-aware 
+preprocessing, band 
+selection, or stratified 
+modeling to stabilize 
+predictions across 
+conditions.
+Temporal 
+Compositing 
+Strategies
+Recent papers compare 
+median, percentile-
+based, seasonal 
+window, and 
+phenology-aware 
+composites to build 
+cleaner Sentinel-2 
+inputs for soil analysis. 
+The consensus is that 
+compositing should 
+reduce atmospheric 
+noise, crop residue 
+effects, and short-term 
+surface disturbance 
+while preserving the 
+soil signal most 
+relevant to the target 
+chemistry.
+Validation 
+Methodologies
+Recent work 
+emphasizes rigorous 
+validation, including k-
+fold cross-validation, 
+spatial blocking, 
+independent holdout 
+sites, and nested tuning 
+to avoid optimistic 
+performance estimates. 
+For soil spectroscopy 
+and remote sensing, 
+spatially aware 
+validation is especially 
+important because 
+nearby samples can be 
+highly correlated and 
+inflate accuracy if split 
+naively.
+
+
+=== PAGE 5 ===
+Literature Foundations — Machine Learning & Spatial 
+Modeling
+Ensemble Models Lead
+Kammerlander et al. (2025) and Vohland et al. (2018) 
+benchmark tree-based ensembles (Random Forest, XGBoost) 
+outperform neural nets on tabular spectral data when 
+properly engineered.
+Feature & Validation Strategies
+Meta-analyses and methodological papers emphasize feature 
+selection, moisture normalization, PCA/indices, and robust 
+spatial cross-validation to avoid overfitting and inflated 
+metrics.
+Hyperparameter Tuning
+Strong performance depends on careful tuning of model 
+complexity, learning rate, depth, and regularization. Grid 
+search, randomized search, Bayesian optimization, and nested 
+cross-validation are commonly recommended to balance 
+accuracy with generalization, especially when sample sizes 
+are modest and spatial autocorrelation can make naive tuning 
+overly optimistic.
+Class Imbalance in Soil Data
+Soil datasets often overrepresent common classes or 
+concentration ranges while rare soil types and extremes are 
+under-sampled. Prior work supports stratified sampling, class 
+weights, focal loss, resampling strategies, and threshold 
+adjustment to improve minority-class recall without 
+degrading calibration or spatial realism.
+Transfer Learning & Domain Adaptation
+When local field data are limited, transfer learning from 
+larger spectral libraries or related regions can improve 
+robustness. Reusing pretrained representations, calibrating 
+with local samples, and adapting across sensors or landscapes 
+help reduce labeling burden while addressing domain shift in 
+illumination, soil background, and acquisition conditions.
+Uncertainty Quantification
+For mapping and decision support, point predictions are not 
+enough. Ensemble variance, quantile regression, conformal 
+prediction, and Bayesian approaches provide uncertainty 
+estimates that expose unreliable predictions, support risk-
+aware interpretation, and highlight where additional sampling 
+would be most valuable.
+
+
+=== PAGE 6 ===
+Target Variables & Spatial Mapping Evidence
+Topsoil Targets
+Studies (Charishma 
+et al. 2024; Ng et al. 
+2019) demonstrate 
+Sentinel-2 band 
+combos and SWIR 
+indices correlate 
+with top 0–20 cm N, 
+SOC, and available 
+P/K when crop 
+residue is separated 
+via SWIR/NDVI 
+masking.
+Actionable 
+Tiering
+Models can convert 
+continuous ppm 
+predictions into 
+Low/Medium/High 
+soil-health tiers and 
+enable regionally 
+calibrated fertilizer 
+recommendations 
+(Bhargavi & Anitha 
+2026; CIGR Journal 
+2025).
+Seasonal 
+Variation
+Soil moisture, 
+residue cover, crop 
+growth stage, and 
+recent rainfall can 
+shift reflectance and 
+nutrient signals over 
+the season. Mapping 
+is stronger when 
+imagery is matched 
+to consistent 
+windows or modeled 
+with seasonal 
+covariates.
+Depth-
+Dependent 
+Profiles
+Target variables 
+should be defined by 
+sampling depth, 
+because nutrient 
+concentration often 
+declines with depth 
+and varies by 
+horizon. Separate 
+models or depth-
+specific outputs help 
+distinguish surface 
+enrichment from 
+deeper-rooted 
+patterns.
+Mixed Crop 
+Types
+In heterogeneous 
+fields, crop type can 
+confound spectral 
+signatures and soil 
+estimates. Stratifying 
+by crop class, 
+masking crop-
+specific canopies, or 
+using crop-aware 
+models helps prevent 
+one cropʼs signal 
+from being mistaken 
+for soil variation.
+
+
+=== PAGE 7 ===
+Known Limitations & 
+Methodological Pitfalls
+1
+Wet-Chemical Testing Constraints
+Lab tests are time-intensive (2–4 weeks), costly (₹500–₹2,500/sample), spatially 
+sparse (composite samples erase intra-field variability), and 
+destructive/manual.
+2
+Naive Satellite Model Risks
+Vegetation cover confounds soil signals; naive assumptions ignore sensor 
+physics (P/K depend on mineral covariance); random splits cause spatial 
+leakage and inflated R²; many studies stop short of farmer advisory 
+translation.
+3
+Atmospheric Effects on Satellite Data
+Clouds, haze, aerosols, water vapor, and variable illumination can distort 
+reflectance values and shift spectral indices. Even after correction, residual 
+atmospheric noise can obscure subtle soil-surface differences, especially in 
+humid or cloudy regions and during narrow acquisition windows.
+4
+Calibration Drift Over Time
+Sensor aging, platform transitions, and changing acquisition conditions can 
+introduce calibration drift that weakens model reliability across seasons and 
+years. Without periodic re-calibration against fresh ground truth, apparent 
+trends may reflect instrument instability rather than genuine changes in soil 
+properties.
+5
+Weak Transferability Across Regions
+Models trained in one agro-ecological zone often fail elsewhere because soil 
+mineralogy, texture, crop residue, management history, and climate differ 
+substantially. This creates strong domain-shift effects, making local retraining, 
+site-specific validation, and region-aware stratification essential before 
+deployment.
+
+
+=== PAGE 8 ===
+Problem Statement & Research Challenges
+Conventional laboratory soil testing is financially inaccessible, slow, and spatially sparse for smallholders, so most farmers make fertilizer 
+decisions with incomplete information. The result is indiscriminate nutrient application, lower yields, avoidable input costs, and long-term soil 
+degradation. Across smallholder farming systems, this challenge affects millions of farmers and has a direct economic impact through wasted 
+fertilizer spend, reduced productivity, and missed opportunities for precision nutrient management.
+This project asks three core research questions: (1) Can Sentinel-2 imagery be used to reliably estimate topsoil N, P, K, SOC, and pH at field-
+relevant 10m resolution? (2) Which spectral, spatial, and terrain-related signals are most predictive across highly variable cropping conditions? 
+(3) How can predictions be translated into an automated, cloud-native advisory pipeline that is robust enough for operational use by farmers 
+and agronomists?
+Model Secondary Covariance
+Isolate Bare Soil
+Resolve Depth Paradox
+The technical hurdles are substantial: soil properties are not directly visible from space, vegetation cover obscures the signal, and nutrient 
+responses vary by soil type, season, and management history. The model must also handle limited ground truth, avoid spatial leakage during 
+validation, generalize across fields and agro-ecological zones, and produce outputs that are interpretable and actionable rather than just 
+statistically accurate.
+
+
+=== PAGE 9 ===
+System Design & Pipeline 
+Overview
+The system is organized as a four-stage cloud-native pipeline that turns Sentinel-2 
+imagery into agronomic recommendations for smallholder fields. It begins with 
+scalable data ingestion, moves through pixel-level filtering and feature 
+engineering, trains multi-target machine learning models, and ends with spatially 
+explicit nutrient and fertilizer advisory outputs.
+1) Ingestion: A STAC API (SpatioTemporal Asset Catalog) is used to query imagery 
+by time, location, platform, and cloud cover, allowing the pipeline to stream only 
+the Sentinel-2 L2A scenes intersecting each farmer polygon. The imagery is 
+accessed as COGs (Cloud-Optimized GeoTIFFs), which are geospatial raster files 
+structured for efficient HTTP range requests. That means the pipeline can read only 
+the needed tiles and bands without downloading entire scenes, which is critical for 
+scalable, serverless processing.
+2) Filtering: The raw scenes are filtered to remove unusable pixels and build a 
+representative bare-soil composite. First, the SCL (Scene Classification Layer) is 
+used to mask clouds, cirrus, cloud shadows, water, and saturated or invalid pixels. 
+Then vegetation-contaminated observations are down-weighted or excluded using 
+spectral indices such as NDVI and BSI. NDVI helps identify green vegetation, while 
+BSI highlights exposed soil. A median compositing strategy across the remaining 
+valid observations reduces residual noise from haze, mixed pixels, and outliers, 
+producing a more stable bare-soil signal for each field.
+3) AI Modeling: For each composite pixel or field sample, the system performs 
+feature engineering from the Sentinel-2 spectral stack. It extracts the 10 m bands 
+and computes additional indices and transforms, such as vegetation, soil, and 
+moisture-sensitive features, yielding a richer predictor set than raw reflectance 
+alone. These features are then fed into multi-target ensemble models trained to 
+estimate topsoil properties including N, P, K, SOC, and pH. Spatial GroupKFold is 
+used so that neighboring samples are kept together during cross-validation, 
+reducing spatial leakage and providing a more realistic estimate of generalization 
+to unseen areas.
+4) Advisory: The model outputs are converted into georeferenced 10 m nutrient 
+rasters, which are then aggregated into field-level management zones and 
+prescription layers. The advisory layer can produce zonation maps showing 
+relative deficiency or sufficiency, plus fertilizer split recommendations such as 
+Urea, DAP, and MOP allocations. Outputs are typically delivered as map-ready 
+raster tiles, polygon summaries, and tabular recommendations so they can support 
+both digital visualization and practical on-farm decision-making.
+
+
+=== PAGE 10 ===
+Objectives, Execution Plan & Expected Outcomes
+Objectives
+Automate STAC/COG ingestion for sub-second farm-level 
+access.
+Isolate bare soil via temporal NDVI/BSI filters and SCL masks.
+Engineer spectral + geo indices; train XGBoost/LightGBM with 
+spatial CV.
+Deliver 10m heatmaps and farmer-friendly Soil Health Card 
+tiers with fertilizer dosage.
+Ensure the pipeline is scalable, repeatable, and usable in 
+operational advisory workflows.
+Execution & Outcomes
+Phase 1 completed: literature survey, STAC access, benchmark 
+datasets, spatial CV framework. Upcoming phases: feature 
+extraction, ML benchmarking, raster inference engine, Web GIS 
+advisory. Expected outcomes: validated regression suite for 
+N/P/K/pH/SOC, continuous 10m intra-field maps, actionable 
+advisory engine, and democratized soil health access for 
+smallholders.
+Phase 1 — Foundations
+Timeline: Weeks 1–4
+Complete literature review and define target agronomic 
+variables.
+Set up STAC catalog access, farm polygon ingestion, and COG 
+retrieval.
+Assemble benchmark fields, labels, and baseline spatial 
+cross-validation splits.
+Finalize project conventions for data versioning, logging, and 
+experiment tracking.
+Success metrics: reliable data access for all pilot parcels, 
+repeatable CV folds, and a documented baseline dataset with no 
+missing metadata for critical fields.
+Phase 2 — Feature Engineering & Filtering
+Timeline: Weeks 5–8
+Implement SCL cloud masking and temporal filtering rules.
+Build bare-soil compositing using NDVI/BSI thresholds and 
+seasonal windows.
+Generate spectral bands, vegetation/soil indices, elevation-
+derived features, and geo-context features.
+Run automated quality checks for masking coverage and 
+raster alignment.
+Success metrics: improved clear-pixel yield, lower cloud 
+contamination, stable feature generation across all pilot plots, 
+and reproducible feature tables for model training.
+Phase 3 — Modeling & Benchmarking
+Timeline: Weeks 9–12
+Train XGBoost and LightGBM models for N, P, K, pH, and 
+SOC.
+Benchmark against simpler baselines to quantify uplift from 
+engineered features.
+Use spatial GroupKFold to reduce spatial leakage and 
+estimate real-world generalization.
+Perform feature importance analysis and error slicing by soil 
+type, region, and season.
+Success metrics: stronger validation performance than baseline 
+models, low fold-to-fold variance, and consistent gains across 
+multiple nutrients rather than a single target.
+Phase 4 — Inference & Advisory Delivery
+Timeline: Weeks 13–16
+Build raster inference engine to generate 10m nutrient 
+surfaces.
+Convert predictions into zonation maps and fertilizer dosage 
+recommendations.
+Integrate outputs into Web GIS for farmer and agronomist 
+review.
+Package Soil Health Card tiers with clear, actionable 
+guidance.
+Success metrics: fast end-to-end inference, clear map 
+readability, advisor acceptance of recommendations, and a 
+usable farmer-facing experience that supports decision-making 
+in the field.
+01
+Validation approach
+Validate data quality first, then model accuracy, then advisory 
+usefulness. Use spatial cross-validation, holdout geographies, ablation 
+tests, residual analysis, and agronomist review to verify both 
+statistical reliability and practical utility.
+02
+KPIs
+Ingestion reliability and latency
+Cloud-free compositing rate
+Feature generation success rate
+Cross-validated model score by nutrient target
+Inference throughput per farm polygon
+Advisor interpretation success and user acceptance
+03
+Team responsibilities
+Remote sensing lead: imagery strategy, masking logic, feature 
+design.
+ML lead: model training, validation, benchmarking, and error 
+analysis.
+GIS/data engineer: STAC pipelines, raster processing, storage, and 
+orchestration.
+Agronomist: label interpretation, fertilizer logic, and 
+recommendation review.
+Product/Web GIS owner: dashboard design, usability feedback, 
+and field-deployment readiness.
+04
+Resource requirements
+Cloud object storage for imagery, features, and outputs.
+Compute for preprocessing, model training, and batch inference.
+PostgreSQL/PostGIS or equivalent geospatial datastore.
+Experiment tracking, model registry, and QA automation.
+Access to reference soil samples and agronomic expertise for 
+validation.
+
+
