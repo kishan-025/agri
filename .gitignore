@@ -1,0 +1,48 @@
+# ==============================================================================
+# Git Ignore Rules for AgriSoil Project
+# ==============================================================================
+
+# Maven Build Directories and Binaries
+**/target/
+*.jar
+*.war
+*.nar
+*.ear
+*.class
+
+# Python Bytecode and Caches
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Python Virtual Environments
+**/.venv/
+**/venv/
+**/env/
+**/env*/
+**/ENV/
+*.egg-info/
+.eggs/
+
+# IDE & Editor Settings
+**/.idea/
+**/.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# Local configuration & environment variables
+.env
+.env.*
+*.local
+application-local.properties
+*.log
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db

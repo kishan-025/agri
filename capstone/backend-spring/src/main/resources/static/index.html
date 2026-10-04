@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Precision Soil Nutrient Diagnosis - Farmer Portal</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Turf.js for geodesic spatial calculations -->
+    <script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 1. Dedicated Farmer Login Screen (Username & Password Only) -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">🌾</div>
+                <h2>AgriSoil Portal</h2>
+                <p>Precision Soil Nutrient Diagnosis</p>
+            </div>
+
+            <!-- Login Status / Error Notification -->
+            <div id="loginStatusMessage" class="login-status-msg" style="display: none;"></div>
+
+            <!-- Sign In Form (Username & Password Only) -->
+            <form id="loginForm" class="auth-form">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" placeholder="Username" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-auth-primary" id="btnLoginSubmit">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Main Application Screen -->
+    <div id="mainAppScreen" class="app-container" style="display: none;">
+        
+        <!-- Top App Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <div class="header-icon">🌾</div>
+                <div class="header-text">
+                    <h1>Smart Soil Health &amp; Nutrient Portal</h1>
+                    <p>Instant satellite soil test &amp; crop nutrient guide for your land</p>
+                </div>
+            </div>
+            <div class="header-user" id="headerUserProfile">
+                <img id="headerAvatar" class="header-avatar" src="https://ui-avatars.com/api/?name=Farmer" alt="Avatar">
+                <div class="header-user-info">
+                    <span class="header-user-name" id="headerUserName">Farmer Kishan</span>
+                    <span class="header-user-email" id="headerUserEmail">farmer@gmail.com</span>
+                </div>
+                <button class="btn-logout-sm" id="btnLogoutHeader" title="Sign Out">🚪 Logout</button>
+            </div>
+        </header>
+
+        <!-- Top Dashboard Viewport (Map on left, Field Controls on right) -->
+        <div class="dashboard-viewport" id="dashboardViewport">
+            
+            <!-- Left: Full Satellite Map Area -->
+            <div class="map-section">
+                <div id="map"></div>
+                
+                <!-- Map Overlay Controls -->
+                <div class="map-overlay-badge">
+                    <span class="live-dot"></span>
+                    <span>Live Satellite View</span>
+                </div>
+
+                <div class="map-coords-badge" id="mapCoordsBadge">
+                    Lat: 13.3409 | Lon: 77.1009
+                </div>
+            </div>
+
+            <!-- Right: Control Panel (Card Layout) -->
+            <div class="controls-section">
+                
+                <!-- Saved Farms Card -->
+                <div class="card" id="savedFarmsSection" style="display: none;">
+                    <div class="card-header">
+                        <h3>🌾 My Saved Fields</h3>
+                        <span class="count-badge" id="farmsCountBadge">0 Fields</span>
+                    </div>
+                    <p class="card-desc">Choose one of your saved fields or mark a new field on the map below.</p>
+                    <div class="select-wrapper">
+                        <select id="savedFarmsSelect">
+                            <option value="">-- Select a field --</option>
+                        </select>
+                    </div>
+                    <div class="selected-farm-actions" id="farmActionsGroup" style="display: none;">
+                        <button class="btn btn-danger-sm" id="btnDeleteFarm">🗑️ Remove Field</button>
+                    </div>
+                </div>
+
+                <!-- Field Mapping Card (Inspired by reference project) -->
+                <div class="card field-mapping-card">
+                    <div class="card-header">
+                        <h3>📍 Mark Field Boundary</h3>
+                    </div>
+                    
+                    <!-- Status Banner -->
+                    <div class="status-banner" id="statusBanner">
+                        Click <strong>"Mark Field Corners"</strong>, then tap the 4 corners of your field on the map.
+                    </div>
+
+                    <!-- Drawing Controls -->
+                    <div class="mapping-btn-grid">
+                        <button class="btn btn-primary" id="btnStartDraw">
+                            <span>🎯 Mark Field Corners</span>
+                        </button>
+                        <button class="btn btn-danger" id="btnClearField">
+                            <span>🔄 Reset</span>
+                        </button>
+                        <button class="btn btn-success" id="btnCompleteField" disabled>
+                            <span>✅ Done Marking</span>
+                        </button>
+                    </div>
+
+                    <!-- Area & Selected Points Display -->
+                    <div class="area-display" id="areaDisplay" style="display: none;">
+                        <div class="area-header">Total Field Area</div>
+                        <div class="area-number" id="areaValue">0.00 <span class="unit">Acres</span></div>
+                        <div class="area-subinfo" id="areaSubInfo">0 hectares | 0 sq. meters</div>
+                    </div>
+
+                    <!-- Save Farm Form (appears when 4 points are completed) -->
+                    <div class="save-farm-form" id="saveFarmForm" style="display: none;">
+                        <label for="farmNameInput">Field Name:</label>
+                        <input type="text" id="farmNameInput" placeholder="e.g. Rice Plot, North Field">
+                        <button class="btn btn-emerald" id="btnSaveFarm">💾 Save Field</button>
+                    </div>
+                </div>
+
+                <!-- Soil Fertility Diagnostic Card -->
+                <div class="card fertility-card" id="fertilitySection" style="display: none;">
+                    <div class="card-header">
+                        <h3>🌱 Soil Health &amp; Nutrients</h3>
+                        <span class="active-farm-badge" id="activeFarmBadge">No Field Selected</span>
+                    </div>
+                    <p class="card-desc">Scan your soil using satellite imagery to check pH and major nutrient levels (N, P, K).</p>
+                    
+                    <button class="btn btn-gradient" id="btnRunFertility">
+                        <span>🔍 Check Soil Nutrients</span>
+                    </button>
+
+                    <!-- Processing Spinner -->
+                    <div class="loading-container" id="loadingContainer" style="display: none;">
+                        <div class="pulsing-radar"></div>
+                        <h4 id="loadingTitle">Scanning Your Field from Satellite...</h4>
+                        <p id="loadingSubtitle">Analyzing soil reflectance and nutrient levels across your field...</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. Full-Width Diagnosis Results Section (Displayed BELOW map and dashboard) -->
+        <section class="results-container full-results-section" id="resultsContainer" style="display: none;">
+            
+            <!-- Top Return / Field Header Bar -->
+            <div class="results-top-bar">
+                <div class="results-field-info">
+                    <span class="results-field-badge">📍 Field Analysis Results</span>
+                    <h2 id="resultsFarmTitle" class="results-farm-title">Crop Health &amp; Soil Nutrients Report</h2>
+                    <p class="results-farm-subtitle">Full-width view of satellite crop indicators and soil nutrient heatmaps. Scroll up anytime to return to your dashboard and change fields.</p>
+                </div>
+                <div class="results-bar-actions">
+                    <button type="button" class="btn btn-change-field" onclick="scrollToDashboard()">
+                        <span>⬆ Change Field / Back to Map</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Metadata Strip -->
+            <div class="meta-strip">
+                <div class="meta-item">
+                    <span class="meta-label">Scan Date</span>
+                    <span class="meta-val" id="metaDate">-</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Cloud Level</span>
+                    <span class="meta-val" id="metaCloud">-</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Detail Resolution</span>
+                    <span class="meta-val">10m x 10m grid</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Tested Land Points</span>
+                    <span class="meta-val" id="metaPixels">-</span>
+                </div>
+            </div>
+
+            <!-- Acquisition & Season Note -->
+            <div class="season-note" id="seasonNoteBox" style="display: none;">
+                <span class="season-icon">🛰️</span>
+                <div class="season-text" id="seasonNoteText"></div>
+            </div>
+
+            <!-- Land-Cover Surface Validation Alert -->
+            <div class="surface-alert" id="surfaceAlertBox" style="display: none;">
+                <div class="surface-alert-header">
+                    <span id="surfaceAlertIcon">🌱</span>
+                    <span id="surfaceAlertTitle">Field Surface Check</span>
+                </div>
+                <div class="surface-alert-msg" id="surfaceAlertMsg"></div>
+            </div>
+
+            <!-- 1. STARTING SECTION: Crop & Soil Satellite Indicators (NDVI, NDBI, BSI, UI) -->
+            <div id="viewSpectral" class="results-section-block">
+                <div class="section-badge-header">
+                    <span class="badge-icon">🛰️</span>
+                    <div>
+                        <h4 class="section-title">1. Crop Health &amp; Satellite Indicators</h4>
+                        <p class="section-subtitle">Real-time vegetation vigor, ground moisture, and bare soil exposure across your field</p>
+                    </div>
+                </div>
+
+                <!-- 4 Spectral Stat Cards -->
+                <div class="nutrients-grid">
+                    <div class="nutrient-card card-n">
+                        <div class="nut-header">Crop Greenness (NDVI)</div>
+                        <div class="nut-val" id="valNdvi">-</div>
+                        <div class="nut-status" id="statusNdvi">Plant Health</div>
+                        <div class="nut-range" id="rangeNdvi">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-p">
+                        <div class="nut-header">Dry Earth Index (NDBI)</div>
+                        <div class="nut-val" id="valNdbi">-</div>
+                        <div class="nut-status" id="statusNdbi">Dry Soil Level</div>
+                        <div class="nut-range" id="rangeNdbi">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-ph">
+                        <div class="nut-header">Bare Soil Coverage (BSI)</div>
+                        <div class="nut-val" id="valBsi">-</div>
+                        <div class="nut-status" id="statusBsi">Soil Openness</div>
+                        <div class="nut-range" id="rangeBsi">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-k">
+                        <div class="nut-header">Hard Surface Index (UI)</div>
+                        <div class="nut-val" id="valUi">-</div>
+                        <div class="nut-status" id="statusUi">Firm Surface</div>
+                        <div class="nut-range" id="rangeUi">Min: - | Max: -</div>
+                    </div>
+                </div>
+
+                <!-- 4 Satellite Spectral Heatmaps -->
+                <h5 class="subsection-title">Satellite Indicator Maps</h5>
+                <div class="heatmaps-grid">
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Crop Greenness (NDVI)</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapNdvi', 'Crop Growth &amp; Greenness (NDVI)')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapNdvi', 'Crop Growth &amp; Greenness (NDVI)')">
+                            <img id="imgHeatmapNdvi" alt="Crop Greenness Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Dry Soil Exposure (NDBI)</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapNdbi', 'Dry Soil Exposure (NDBI)')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapNdbi', 'Dry Soil Exposure (NDBI)')">
+                            <img id="imgHeatmapNdbi" alt="Dry Earth Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Open Soil Coverage (BSI)</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapBsi', 'Open Soil Coverage (BSI)')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapBsi', 'Open Soil Coverage (BSI)')">
+                            <img id="imgHeatmapBsi" alt="Bare Soil Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Hard Surface / Structure (UI)</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapUi', 'Hard Surface / Structure (UI)')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapUi', 'Hard Surface / Structure (UI)')">
+                            <img id="imgHeatmapUi" alt="Surface Map" src="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. NEXT SECTION: Essential Soil Nutrients (pH, N, P, K) -->
+            <div id="viewNutrients" class="results-section-block">
+                <div class="section-badge-header">
+                    <span class="badge-icon">🌾</span>
+                    <div>
+                        <h4 class="section-title">2. Soil Nutrients &amp; Fertility Levels</h4>
+                        <p class="section-subtitle">Estimated soil acidity and major macronutrient levels for balanced crop fertilization</p>
+                    </div>
+                </div>
+
+                <!-- 4 Nutrient Stat Cards -->
+                <div class="nutrients-grid">
+                    <div class="nutrient-card card-ph">
+                        <div class="nut-header">Soil Acidity / pH Level</div>
+                        <div class="nut-val" id="valPh">-</div>
+                        <div class="nut-status" id="statusPh">Optimal</div>
+                        <div class="nut-range" id="rangePh">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-n">
+                        <div class="nut-header">Nitrogen (N) - Plant Growth</div>
+                        <div class="nut-val" id="valN">- <span class="sub-unit">mg/kg</span></div>
+                        <div class="nut-status" id="statusN">Optimal</div>
+                        <div class="nut-range" id="rangeN">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-p">
+                        <div class="nut-header">Phosphorus (P) - Root Health</div>
+                        <div class="nut-val" id="valP">- <span class="sub-unit">mg/kg</span></div>
+                        <div class="nut-status" id="statusP">Optimal</div>
+                        <div class="nut-range" id="rangeP">Min: - | Max: -</div>
+                    </div>
+
+                    <div class="nutrient-card card-k">
+                        <div class="nut-header">Potassium (K) - Plant Strength</div>
+                        <div class="nut-val" id="valK">- <span class="sub-unit">mg/kg</span></div>
+                        <div class="nut-status" id="statusK">Optimal</div>
+                        <div class="nut-range" id="rangeK">Min: - | Max: -</div>
+                    </div>
+                </div>
+
+                <!-- 4 Soil Nutrient Distribution Heatmaps -->
+                <h5 class="subsection-title">Nutrient Distribution Maps</h5>
+                <div class="heatmaps-grid">
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Soil pH Level Map</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapPh', 'Soil pH Level Map')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapPh', 'Soil pH Level Map')">
+                            <img id="imgHeatmapPh" alt="Soil pH Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Nitrogen (N) Map</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapN', 'Nitrogen (N) Distribution Map')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapN', 'Nitrogen (N) Distribution Map')">
+                            <img id="imgHeatmapN" alt="Nitrogen Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Phosphorus (P) Map</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapP', 'Phosphorus (P) Distribution Map')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapP', 'Phosphorus (P) Distribution Map')">
+                            <img id="imgHeatmapP" alt="Phosphorus Map" src="">
+                        </div>
+                    </div>
+
+                    <div class="heatmap-box">
+                        <div class="heatmap-header-row">
+                            <h5>Potassium (K) Map</h5>
+                            <button type="button" class="btn-fullscreen-toggle" onclick="openFullscreenModal('imgHeatmapK', 'Potassium (K) Distribution Map')">⛶ Full Screen</button>
+                        </div>
+                        <div class="img-wrapper" onclick="openFullscreenModal('imgHeatmapK', 'Potassium (K) Distribution Map')">
+                            <img id="imgHeatmapK" alt="Potassium Map" src="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </div>
+
+    <!-- Floating Back-to-Dashboard Button -->
+    <button id="btnFloatingBackToDashboard" class="btn-floating-top" onclick="scrollToDashboard()" title="Change Field / Back to Map" style="display: none;">
+        <span>⬆ Change Field</span>
+    </button>
+
+    <!-- Full Screen Image Modal -->
+    <div id="fullscreenModal" class="fullscreen-modal" style="display: none;">
+        <div class="fullscreen-modal-backdrop" onclick="closeFullscreenModal()"></div>
+        <div class="fullscreen-modal-content">
+            <div class="fullscreen-modal-header">
+                <h3 id="fullscreenModalTitle">Map View</h3>
+                <button type="button" class="btn-modal-close" onclick="closeFullscreenModal()" title="Close (Esc)">✕ Close</button>
+            </div>
+            <div class="fullscreen-modal-body">
+                <img id="fullscreenModalImg" src="" alt="Full Screen Map View">
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Application Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
