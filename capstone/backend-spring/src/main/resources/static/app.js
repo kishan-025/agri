@@ -4,8 +4,18 @@
  * Uses Leaflet.js, Esri Satellite Imagery, and Turf.js
  */
 
-// Backend API Base URL (Spring Boot on Port 9090 - NOT 8080 or 8000)
-const API_BASE = "http://localhost:9090";
+// Backend API Base URL
+// - Cloud/Production (e.g. Vercel, Render, Docker) or direct Spring Boot: Relative ("") prevents Mixed Content and domain issues
+// - Local dev server (port 8501, 5500, 3000) or file:// protocol: Explicit "http://localhost:9090"
+const API_BASE = (function () {
+    if (typeof window !== "undefined" && window.location) {
+        const { hostname, port, protocol } = window.location;
+        if (protocol === "file:" || ((hostname === "localhost" || hostname === "127.0.0.1") && (port === "8501" || port === "5500" || port === "3000"))) {
+            return "http://localhost:9090";
+        }
+    }
+    return "";
+})();
 
 // Global Application State
 const state = {
@@ -702,7 +712,9 @@ async function handleLoginSubmit(e) {
             showLoginStatus(err.error || "Invalid username or password.", "error");
         }
     } catch (e) {
-        showLoginStatus("Unable to reach backend server at port 9090. Please ensure Spring Boot is running.", "error");
+        console.error("Login connection failure:", e);
+        const serverHint = API_BASE ? ` (${API_BASE})` : "";
+        showLoginStatus(`Unable to connect to backend server${serverHint}. Please ensure the Spring Boot service is running.`, "error");
     } finally {
         if (btnSubmit) btnSubmit.disabled = false;
     }
