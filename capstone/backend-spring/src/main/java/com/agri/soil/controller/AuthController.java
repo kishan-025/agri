@@ -1,9 +1,9 @@
 package com.agri.soil.controller;
 
 import com.agri.soil.dto.FarmerResponse;
-import com.agri.soil.dto.GoogleAuthRequest;
-import com.agri.soil.entity.Farmer;
-import com.agri.soil.service.GoogleAuthService;
+import com.agri.soil.dto.LoginRequest;
+import com.agri.soil.dto.RegisterRequest;
+import com.agri.soil.service.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,35 +12,40 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*") // Allows Streamlit on port 8501
+@CrossOrigin(origins = "*")
 public class AuthController {
 
-    private final GoogleAuthService googleAuthService;
+    private final AuthService authService;
 
-    public AuthController(GoogleAuthService googleAuthService) {
-        this.googleAuthService = googleAuthService;
+    public AuthController(AuthService authService) {
+        this.authService = authService;
     }
 
-    @PostMapping("/google")
-    public ResponseEntity<?> authenticateGoogle(@RequestBody GoogleAuthRequest request) {
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
-            if (request.getIdToken() == null || request.getIdToken().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "idToken is required."));
-            }
-
-            Farmer farmer = googleAuthService.verifyAndAuthenticate(request.getIdToken());
-            FarmerResponse response = FarmerResponse.builder()
-                    .id(farmer.getId())
-                    .googleId(farmer.getGoogleId())
-                    .email(farmer.getEmail())
-                    .fullName(farmer.getFullName())
-                    .pictureUrl(farmer.getPictureUrl())
-                    .build();
-
+            FarmerResponse response = authService.login(request);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Authentication failed: " + e.getMessage()));
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Login failed: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
+        try {
+            FarmerResponse response = authService.register(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Registration failed: " + e.getMessage()));
         }
     }
 }

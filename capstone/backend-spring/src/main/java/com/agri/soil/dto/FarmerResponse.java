@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class FarmerResponse {
     private Long id;
-    private String googleId;
+    private String username;
     private String email;
     private String fullName;
     private String pictureUrl;

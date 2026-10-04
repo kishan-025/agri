@@ -5,5 +5,5 @@ echo ========================================================
 echo Starting Spring Boot 3.3 (Java 21) on Port 9090...
 echo Connecting to Aiven Cloud PostgreSQL PostGIS...
 echo ========================================================
-mvn spring-boot:run
+mvn spring-boot:run -Dspring-boot.run.profiles=local
 pause

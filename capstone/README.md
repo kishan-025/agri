@@ -11,18 +11,19 @@ The project is split into three decoupled services. As instructed, **ports 8080 
 
 ```
 +-------------------------------------------------------------+
-|               Farmer Web Portal (Streamlit)                 |
-|               Port: 8501                                    |
-|   • Google Single-Sign-On                                   |
-|   • Interactive 4-Corner Quadrilateral Field Mapping        |
-|   • High-Resolution 2D Spatial Heatmaps (pH, N, P, K)       |
+|        Modern Farmer Web Portal (HTML5 / CSS3 / JS)         |
+|        Port: 8501 (and served on Port: 9090)                |
+|   • Simple Farmer Sign-In (SHA-256 Auth)                    |
+|   • Leaflet & Esri World Imagery Satellite Map              |
+|   • Interactive 4-Corner Quadrilateral Field Selection      |
+|   • Full-Width 2D Spatial Heatmaps (pH, N, P, K)            |
 +------------------------------+------------------------------+
                                | REST (JSON)
                                v
 +-------------------------------------------------------------+
 |            Backend Enterprise API (Spring Boot 3.3)         |
 |            Runtime: Java 21 LTS | Port: 9090                |
-|   • Google OAuth2 ID Token Verification                     |
+|   • Custom SHA-256 Credential Authentication                |
 |   • JTS Polygon / Geodesic Field Area Calculation (Acres)   |
 |   • Fertility Assessment Persistence                        |
 +--------------+-------------------------------+--------------+
@@ -103,37 +104,36 @@ mvn spring-boot:run
 ```
 *API Base:* `http://localhost:9090/api`
 
-#### Terminal 3: Streamlit Farmer Frontend (Port 8501)
+#### Terminal 3: Modern Farmer Web Portal (Port 8501)
 ```powershell
 cd c:\Users\kisha\OneDrive\Desktop\agri\capstone\frontend
-streamlit run app.py --server.port 8501
+python -m http.server 8501
 ```
-*Open Browser:* `http://localhost:8501`
+*Open Browser:* `http://localhost:8501` *(Also accessible directly at `http://localhost:9090`)*
 
 ---
 
 ## 3. How to Use the Application
 
 1. **Farmer Authentication:**
-   - In the sidebar, sign in using Google or click **"Quick Demo Login"** for instant access.
-   - Single Farmer role: only the authenticated farmer can access their registered farms.
+   - Sign in using your registered username and password (e.g. `farmer_kishan` / `farmer123`).
+   - Authenticated session ensures each farmer only accesses their own registered fields.
 
 2. **Interactive 4-Corner Quadrilateral Mapping:**
-   - Navigate to the **"Interactive 4-Corner Farm Boundary"** tab.
-   - Click **4 corner points** on the high-resolution satellite map around your agricultural field.
-   - The map automatically draws the quadrilateral polygon.
-   - Enter your Farm Name (e.g., `East Paddy Field`) and click **"Save Farm to PostgreSQL (PostGIS)"**.
-   - PostGIS automatically computes the geodesic surface area in acres.
+   - Click **"Mark Field Corners"** and tap **4 corner points** on the high-resolution satellite map around your agricultural field.
+   - The map automatically draws the quadrilateral polygon and calculates the geodesic surface area in acres.
+   - Enter your Field Name (e.g., `Rice Plot`) and click **"Save Field"**.
 
 3. **Fertility Check & 2D Spatial Heatmaps:**
-   - Select your saved farm from the dropdown.
-   - Go to the **"Soil Fertility Diagnostic Heatmaps"** tab.
-   - Click **"🚀 Run Fertility Check"**.
-   - The system streams the latest cloud-free Copernicus Sentinel-2 L2A scene from Microsoft Planetary Computer STAC, applies polygon cookie-cutter masking, calculates the 7 spectral indices, and runs the 4 trained XGBoost models.
-   - View the results:
-     - Acquisition date and cloud coverage percentage.
-     - Field-wide mean, min, and max statistics for **Soil pH**, **Nitrogen (N)**, **Phosphorus (P)**, and **Potassium (K)**.
-     - High-resolution 2D heatmaps rendered with 100% transparency outside the quadrilateral fence.
+   - Select your saved field from the dropdown.
+   - Click **"🔍 Check Soil Nutrients"**.
+   - The system streams the latest cloud-free Copernicus Sentinel-2 L2A scene, calculates the spectral indices, and runs the 4 trained XGBoost models.
+   - View the results below the map:
+     - Acquisition scan date, cloud level, and land surface verification check.
+     - **Crop Health & Satellite Indicators:** NDVI, NDBI, BSI, UI metrics and heatmaps.
+     - **Soil Nutrients & Fertility Levels:** Soil pH, Nitrogen (N), Phosphorus (P), and Potassium (K) metrics and heatmaps.
+     - Dedicated **"Full Screen"** viewing on every heatmap.
+     - Scroll up anytime to return to the dashboard and switch fields.
 
 ---
 
@@ -141,9 +141,9 @@ streamlit run app.py --server.port 8501
 
 | Component | Technology | Role |
 | :--- | :--- | :--- |
-| **Frontend** | Streamlit, Folium, `streamlit-folium` | Farmer UI, 4-corner boundary marking, heatmap rendering |
-| **Backend** | Spring Boot 3.3.3, Java 21 LTS, Maven | REST API, Google Auth verification, JTS geometry processing |
+| **Frontend** | HTML5, CSS3, JavaScript (Leaflet.js & Turf.js) | Farmer UI, 4-corner boundary marking, full-width heatmap viewer |
+| **Backend** | Spring Boot 3.3.3, Java 21 LTS, Maven | REST API, SHA-256 Auth, JTS geometry processing |
 | **Database** | PostgreSQL with PostGIS on Aiven Cloud | Cloud spatial database, geodesic acreage, spatial indexing |
-| **AI / Satellite Engine** | Python 3.12, FastAPI, XGBoost, Planetary Computer STAC, RioXarray | Remote sensing band streaming, polygon masking, ML inference |
+| **AI / Satellite Engine** | Python 3.12, FastAPI, XGBoost, Element84 STAC, RioXarray | Remote sensing band streaming, polygon masking, ML inference |
 | **Satellite Data** | Copernicus Sentinel-2 L2A (10m - 20m) | Multi-spectral surface reflectance |
 | **Machine Learning** | 4 Trained XGBoost Regressors | Trained on LUCAS benchmark dataset (Kammerlander et al., 2025) |

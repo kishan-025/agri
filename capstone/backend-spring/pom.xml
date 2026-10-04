@@ -20,7 +20,6 @@
     <properties>
         <java.version>21</java.version>
         <jts.version>1.19.0</jts.version>
-        <google.api.client.version>2.6.0</google.api.client.version>
     </properties>
     
     <dependencies>
@@ -54,13 +53,6 @@
             <groupId>org.locationtech.jts</groupId>
             <artifactId>jts-core</artifactId>
             <version>${jts.version}</version>
-        </dependency>
-        
-        <!-- Google OAuth2 ID Token Verification -->
-        <dependency>
-            <groupId>com.google.api-client</groupId>
-            <artifactId>google-api-client</artifactId>
-            <version>${google.api.client.version}</version>
         </dependency>
         
         <!-- WebClient (Calling Python AI Microservice) -->

@@ -1,8 +1,11 @@
 @echo off
-title Streamlit Farmer Web Portal (Port 8501)
+title Modern Farmer Web Portal (Port 8501)
 cd /d "%~dp0frontend"
 echo ========================================================
-echo Starting Streamlit Farmer Web Portal on Port 8501...
+echo Starting Modern HTML5/Leaflet Farmer Web Portal...
+echo Listening on: http://localhost:8501
 echo ========================================================
-streamlit run app.py --server.port 8501
+
+start "" "http://localhost:8501"
+python -m http.server 8501
 pause
