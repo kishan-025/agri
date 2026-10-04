@@ -6,6 +6,7 @@ import com.agri.soil.entity.Farm;
 import com.agri.soil.entity.Farmer;
 import com.agri.soil.repository.FarmRepository;
 import com.agri.soil.repository.FarmerRepository;
+import com.agri.soil.repository.FertilityAssessmentRepository;
 import org.locationtech.jts.geom.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +19,15 @@ public class FarmService {
 
     private final FarmRepository farmRepository;
     private final FarmerRepository farmerRepository;
+    private final FertilityAssessmentRepository assessmentRepository;
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
 
-    public FarmService(FarmRepository farmRepository, FarmerRepository farmerRepository) {
+    public FarmService(FarmRepository farmRepository, 
+                       FarmerRepository farmerRepository,
+                       FertilityAssessmentRepository assessmentRepository) {
         this.farmRepository = farmRepository;
         this.farmerRepository = farmerRepository;
+        this.assessmentRepository = assessmentRepository;
     }
 
     @Transactional
@@ -91,7 +96,9 @@ public class FarmService {
                 .orElseThrow(() -> new IllegalArgumentException("Farm with ID " + farmId + " not found."));
     }
 
+    @Transactional
     public void deleteFarm(Long farmId) {
+        assessmentRepository.deleteByFarmId(farmId);
         farmRepository.deleteById(farmId);
     }
 

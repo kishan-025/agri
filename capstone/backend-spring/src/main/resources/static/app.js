@@ -321,8 +321,16 @@ function renderFarmsDropdown() {
 function selectFarmById(farmId) {
     if (!farmId) {
         state.selectedFarm = null;
+        const select = document.getElementById("savedFarmsSelect");
+        if (select) select.value = "";
         document.getElementById("farmActionsGroup").style.display = "none";
         document.getElementById("fertilitySection").style.display = "none";
+        const results = document.getElementById("resultsContainer");
+        if (results) results.style.display = "none";
+        const loader = document.getElementById("loadingContainer");
+        if (loader) loader.style.display = "none";
+        const floatingBtn = document.getElementById("btnFloatingBackToDashboard");
+        if (floatingBtn) floatingBtn.style.display = "none";
         clearField();
         return;
     }
@@ -373,20 +381,37 @@ function selectFarmById(farmId) {
 }
 
 async function deleteSelectedFarm() {
-    if (!state.selectedFarm) return;
-    if (!confirm(`Are you sure you want to delete '${state.selectedFarm.farmName}'?`)) return;
+    if (!state.selectedFarm) {
+        alert("No field is currently selected to remove.");
+        return;
+    }
+    const farmName = state.selectedFarm.farmName;
+    const farmId = state.selectedFarm.id;
+    if (!confirm(`Are you sure you want to remove the field '${farmName}'?`)) return;
+
+    const deleteBtn = document.getElementById("btnDeleteFarm");
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.innerText = "⏳ Removing...";
+    }
 
     try {
-        const resp = await fetch(`${API_BASE}/api/farms/${state.selectedFarm.id}`, { method: "DELETE" });
+        const resp = await fetch(`${API_BASE}/api/farms/${farmId}`, { method: "DELETE" });
         if (resp.ok) {
-            alert("Farm deleted successfully.");
+            alert(`Field '${farmName}' removed successfully.`);
             selectFarmById(null);
             await loadSavedFarms();
         } else {
-            alert("Failed to delete farm.");
+            const errData = await resp.json().catch(() => ({}));
+            alert(errData.error || "Failed to remove field from server.");
         }
     } catch (e) {
         alert("Error connecting to backend: " + e.message);
+    } finally {
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.innerText = "🗑️ Remove Field";
+        }
     }
 }
 

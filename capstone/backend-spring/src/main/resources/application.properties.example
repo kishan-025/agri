@@ -5,6 +5,11 @@
 
 server.port=${PORT:9090}
 
+# Embedded Tomcat Tuning for low-memory container environments
+server.tomcat.threads.max=20
+server.tomcat.threads.min-spare=2
+server.tomcat.max-connections=100
+
 # Aiven Cloud PostgreSQL Connection
 spring.datasource.url=jdbc:postgresql://<AIVEN_HOST>:<AIVEN_PORT>/defaultdb?sslmode=require
 spring.datasource.username=<AIVEN_USERNAME>

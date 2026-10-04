@@ -42,6 +42,10 @@ public class Farm {
     private Double maxLon;
     private Double maxLat;
 
+    @OneToMany(mappedBy = "farm", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private java.util.List<FertilityAssessment> assessments = new java.util.ArrayList<>();
+
     @Builder.Default
     private ZonedDateTime createdAt = ZonedDateTime.now();
 }
