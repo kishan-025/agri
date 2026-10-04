@@ -3,13 +3,19 @@
 # Copy this file to application-local.properties and fill in your credentials
 # ==============================================================================
 
-server.port=9090
+server.port=${PORT:9090}
 
 # Aiven Cloud PostgreSQL Connection
 spring.datasource.url=jdbc:postgresql://<AIVEN_HOST>:<AIVEN_PORT>/defaultdb?sslmode=require
 spring.datasource.username=<AIVEN_USERNAME>
 spring.datasource.password=<AIVEN_PASSWORD>
 spring.datasource.driver-class-name=org.postgresql.Driver
+
+# HikariCP Connection Pool Constraints (Critical for Aiven free tier)
+spring.datasource.hikari.maximum-pool-size=3
+spring.datasource.hikari.minimum-idle=1
+spring.datasource.hikari.idle-timeout=30000
+spring.datasource.hikari.max-lifetime=60000
 
 # JPA & Hibernate Spatial Settings
 spring.jpa.hibernate.ddl-auto=update
@@ -18,4 +24,4 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.properties.hibernate.format_sql=true
 
 # Python Satellite ML Microservice (Assigned Port 7000)
-python.ai.service.url=http://localhost:7000
+python.ai.service.url=${PYTHON_AI_SERVICE_URL:http://localhost:7000}
