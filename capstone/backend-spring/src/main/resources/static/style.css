@@ -251,6 +251,9 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .btn-logout-sm:hover {
@@ -668,6 +671,13 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.surface-alert-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .surface-alert-msg {

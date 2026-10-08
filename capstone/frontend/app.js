@@ -97,7 +97,7 @@ function startDrawing() {
     clearField();
     state.isDrawing = true;
     document.getElementById("map").style.cursor = "crosshair";
-    updateStatusBanner("🎯 <strong>Marking Active:</strong> Click on the map to place Corner 1 of your field.", "#eff6ff", "#3b82f6");
+    updateStatusBanner("<strong>Marking Active:</strong> Click on the map to place Corner 1 of your field.", "#eff6ff", "#3b82f6");
     document.getElementById("btnCompleteField").disabled = true;
 }
 
@@ -105,7 +105,7 @@ function handleMapClick(e) {
     if (!state.isDrawing) return;
 
     if (state.drawnPoints.length >= 4) {
-        updateStatusBanner("⚠️ 4 corners marked. Click <strong>'Done Marking'</strong> to calculate area.", "#fef3c7", "#f59e0b");
+        updateStatusBanner("4 corners marked. Click <strong>'Done Marking'</strong> to calculate area.", "#fef3c7", "#f59e0b");
         return;
     }
 
@@ -131,9 +131,9 @@ function handleMapClick(e) {
 
     // Update Banner
     if (cornerIndex < 4) {
-        updateStatusBanner(`📍 Corner ${cornerIndex} placed. Click map for <strong>Corner ${cornerIndex + 1}</strong>.`, "#eff6ff", "#3b82f6");
+        updateStatusBanner(`Corner ${cornerIndex} placed. Click map for <strong>Corner ${cornerIndex + 1}</strong>.`, "#eff6ff", "#3b82f6");
     } else if (cornerIndex === 4) {
-        updateStatusBanner("✅ <strong>All 4 corners marked!</strong> Click <strong>'Done Marking'</strong> to calculate field area.", "#ecfdf5", "#10b981");
+        updateStatusBanner("<strong>All 4 corners marked!</strong> Click <strong>'Done Marking'</strong> to calculate field area.", "#ecfdf5", "#10b981");
         document.getElementById("btnCompleteField").disabled = false;
     }
 }
@@ -182,7 +182,7 @@ function completeField() {
 
     // Show Save Farm Form
     document.getElementById("saveFarmForm").style.display = "flex";
-    updateStatusBanner("🎉 <strong>Field marked!</strong> Enter a name below and click Save Field.", "#ecfdf5", "#10b981");
+    updateStatusBanner("<strong>Field Boundary Defined.</strong> Enter a name below and click Save Field.", "#ecfdf5", "#10b981");
     document.getElementById("btnCompleteField").disabled = true;
 }
 
@@ -254,7 +254,7 @@ async function saveFarm() {
 
     const saveBtn = document.getElementById("btnSaveFarm");
     saveBtn.disabled = true;
-    saveBtn.innerText = "⏳ Saving field...";
+    saveBtn.innerHTML = `<span>Saving field...</span>`;
 
     try {
         const resp = await fetch(`${API_BASE}/api/farms`, {
@@ -265,7 +265,7 @@ async function saveFarm() {
 
         if (resp.status === 201) {
             const newFarm = await resp.json();
-            alert(`🎉 Field '${newFarm.farmName}' saved successfully!\nTotal Area: ${newFarm.areaAcres.toFixed(2)} Acres.`);
+            alert(`Field '${newFarm.farmName}' saved successfully!\nTotal Area: ${newFarm.areaAcres.toFixed(2)} Acres.`);
             farmNameInput.value = "";
             clearField();
             await loadSavedFarms();
@@ -280,7 +280,7 @@ async function saveFarm() {
         alert("Cannot connect to backend server. Make sure it is running.");
     } finally {
         saveBtn.disabled = false;
-        saveBtn.innerText = "💾 Save Field";
+        saveBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>Save Field</span>`;
     }
 }
 
@@ -392,7 +392,7 @@ async function deleteSelectedFarm() {
     const deleteBtn = document.getElementById("btnDeleteFarm");
     if (deleteBtn) {
         deleteBtn.disabled = true;
-        deleteBtn.innerText = "⏳ Removing...";
+        deleteBtn.innerHTML = `<span>Removing...</span>`;
     }
 
     try {
@@ -410,7 +410,7 @@ async function deleteSelectedFarm() {
     } finally {
         if (deleteBtn) {
             deleteBtn.disabled = false;
-            deleteBtn.innerText = "🗑️ Remove Field";
+            deleteBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg><span>Remove Field</span>`;
         }
     }
 }
@@ -503,12 +503,12 @@ function renderFertilityResults(data) {
         const sv = data.surface_validation;
         if (sv.is_soil_valid) {
             alertBox.className = "surface-alert valid-soil";
-            alertIcon.innerText = "🌱";
+            alertIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`;
             alertTitle.innerText = "Field Verified: Agricultural Land";
             alertMsg.innerHTML = `Satellite reflection confirms natural farmland. Soil nutrient levels are ready for your review below.`;
         } else {
             alertBox.className = "surface-alert warning-roof";
-            alertIcon.innerText = "⚠️";
+            alertIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
             alertTitle.innerText = `Structure Detected: ${sv.surface_type}`;
             alertMsg.innerHTML = `<strong>Note:</strong> ${sv.warning}<br><span style="display:inline-block; margin-top:4px;">Tip: For best accuracy, make sure your marked boundary only covers soil or crops.</span>`;
         }
