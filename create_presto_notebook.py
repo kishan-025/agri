@@ -23,7 +23,7 @@ def add_code(text):
 # Cell 0: Header
 # -------------------------------------------------------------
 add_md('''# 🛰️ Multi-Task Soil Diagnostics Pipeline: Presto Foundation Model + Deep ANN Head
-### End-to-End Spaceborne Estimation of Soil pH, Nitrogen (N), Phosphorus (P), Potassium (K), and Soil Organic Carbon (SOC)
+### End-to-End Spaceborne Estimation of Soil pH, Available Nitrogen (N), Extractable Phosphorus (P), and Exchangeable Potassium (K)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)
 
@@ -33,7 +33,7 @@ add_md('''# 🛰️ Multi-Task Soil Diagnostics Pipeline: Presto Foundation Mode
 1. **Data Ingestion:** Streams Copernicus Sentinel-2 L2A (10 spectral bands) via **Microsoft Planetary Computer STAC API**.
 2. **Environmental Covariates:** Ingests SRTM Topography (Elevation/Slope) and historical weather (ERA5/Open-Meteo).
 3. **NASA Harvest Presto Backbone:** Transforms multi-sensor temporal observations into a dense **128-dimensional embedding vector**.
-4. **Multi-Task PyTorch ANN Head:** A shared neural trunk learning biochemical nutrient covariance, branching into **5 task-specific regression heads** (with `log1p` on P and K).
+4. **Multi-Task PyTorch ANN Head:** A shared neural trunk learning biochemical nutrient covariance, branching into **4 task-specific regression heads** (with `log1p` on P and K).
 5. **Model Export:** Exports production weights (`multitask_soil_ann.pt`) for real-time 2D spatial heatmap rendering in the web application (`app.py`).''')
 
 # -------------------------------------------------------------
@@ -98,12 +98,11 @@ print("✅ Presto Foundation Model initialized and frozen successfully (3.5M par
 # Cell 5 & 6: Step 3 - Load LUCAS Soil Dataset
 # -------------------------------------------------------------
 add_md('''## 📂 Step 3: Load LUCAS Soil Dataset
-We load the European LUCAS soil survey points (`LUCAS_Soil_2018.csv`), standardize column names, and prepare the 5 target properties:
+We load the European LUCAS soil survey points (`LUCAS_Soil_2018.csv`), standardize column names, and prepare the 4 core soil properties:
 * **Soil pH** (`pH_CaCl2`)
 * **Available Nitrogen (N)**
 * **Extractable Phosphorus (P)**
-* **Exchangeable Potassium (K)**
-* **Soil Organic Carbon (SOC / OC)**''')
+* **Exchangeable Potassium (K)**''')
 
 add_code('''# Check for LUCAS file path
 possible_paths = [
@@ -135,18 +134,11 @@ if "SURVEY_DATE" in df_soil.columns:
 if "pH_CaCl2" in df_soil.columns:
     df_soil["pH"] = df_soil["pH_CaCl2"]
 
-# Organic Carbon (SOC): If 'OC' column exists use it; otherwise create synthetic benchmark
-if "OC" in df_soil.columns:
-    df_soil["SOC"] = df_soil["OC"]
-elif "SOC" not in df_soil.columns:
-    # Agronomic standard proxy based on Total Nitrogen (C:N ratio typically 10.5)
-    df_soil["SOC"] = (df_soil["N"] * 10.5).clip(lower=2.0, upper=80.0)
-
-# Filter rows with complete data
-target_cols = ["pH", "N", "P", "K", "SOC"]
+# Filter rows with complete 4-target data
+target_cols = ["pH", "N", "P", "K"]
 df_soil = df_soil.dropna(subset=["Latitude", "Longitude"] + target_cols).reset_index(drop=True)
 print(f"✅ Dataset ready with {len(df_soil)} validated soil points across Europe.")
-df_soil[["POINTID", "Latitude", "Longitude", "pH", "N", "P", "K", "SOC"]].head()''')
+df_soil[["POINTID", "Latitude", "Longitude", "pH", "N", "P", "K"]].head()''')
 
 # -------------------------------------------------------------
 # Cell 7 & 8: Step 4 - Planetary Computer Ingestion
@@ -265,7 +257,6 @@ else:
             r["N"] = float(row["N"])
             r["P"] = float(row["P"])
             r["K"] = float(row["K"])
-            r["SOC"] = float(row["SOC"])
             r["NUTS_2"] = str(row.get("NUTS_2", f"region_{idx % 10}"))
             extracted_rows.append(r)
             
@@ -277,15 +268,14 @@ print(f"ML Dataset Shape: {df_ml.shape}")
 df_ml.head(3)''')
 
 # -------------------------------------------------------------
-# Cell 11 & 12: Step 5 - Define Multi-Task ANN
+# Cell 11 & 12: Step 5 - Define Multi-Task ANN (4 Heads)
 # -------------------------------------------------------------
 add_md('''## 🧠 Step 5: Define Multi-Task Artificial Neural Network (PyTorch)
-A shared deep representation trunk (128 ➔ 64 ➔ 32) models geochemical covariance, before branching into 5 distinct prediction heads:
+A shared deep representation trunk (128 ➔ 64 ➔ 32) models geochemical covariance, before branching into **4 distinct prediction heads**:
 1. `head_pH`: Direct scale (4.0 to 9.0)
 2. `head_N`: Available Nitrogen (mg/kg)
 3. `head_P`: Extractable Phosphorus (**log1p scale**)
-4. `head_K`: Exchangeable Potassium (**log1p scale**)
-5. `head_SOC`: Soil Organic Carbon (g/kg)''')
+4. `head_K`: Exchangeable Potassium (**log1p scale**)''')
 
 add_code('''class MultiTaskSoilANN(nn.Module):
     def __init__(self, input_dim=128, dropout_rate=0.2):
@@ -304,39 +294,36 @@ add_code('''class MultiTaskSoilANN(nn.Module):
             nn.Dropout(dropout_rate / 2.0)
         )
         
-        # 2. 5 Task-Specific Output Heads
-        self.head_pH  = nn.Linear(32, 1)
-        self.head_N   = nn.Linear(32, 1)
-        self.head_P   = nn.Linear(32, 1)  # Predicts log1p(P)
-        self.head_K   = nn.Linear(32, 1)  # Predicts log1p(K)
-        self.head_SOC = nn.Linear(32, 1)
+        # 2. 4 Task-Specific Output Heads
+        self.head_pH = nn.Linear(32, 1)
+        self.head_N  = nn.Linear(32, 1)
+        self.head_P  = nn.Linear(32, 1)  # Predicts log1p(P)
+        self.head_K  = nn.Linear(32, 1)  # Predicts log1p(K)
 
     def forward(self, x):
         latent = self.shared_trunk(x)
         return {
-            "pH":  self.head_pH(latent).squeeze(-1),
-            "N":   self.head_N(latent).squeeze(-1),
-            "P":   self.head_P(latent).squeeze(-1),
-            "K":   self.head_K(latent).squeeze(-1),
-            "SOC": self.head_SOC(latent).squeeze(-1)
+            "pH": self.head_pH(latent).squeeze(-1),
+            "N":  self.head_N(latent).squeeze(-1),
+            "P":  self.head_P(latent).squeeze(-1),
+            "K":  self.head_K(latent).squeeze(-1)
         }
 
 class SoilDataset(Dataset):
     def __init__(self, X, y_dict):
         self.X = torch.tensor(X, dtype=torch.float32)
-        self.y_pH  = torch.tensor(y_dict["pH"], dtype=torch.float32)
-        self.y_N   = torch.tensor(y_dict["N"], dtype=torch.float32)
-        self.y_P   = torch.tensor(np.log1p(y_dict["P"]), dtype=torch.float32)
-        self.y_K   = torch.tensor(np.log1p(y_dict["K"]), dtype=torch.float32)
-        self.y_SOC = torch.tensor(y_dict["SOC"], dtype=torch.float32)
+        self.y_pH = torch.tensor(y_dict["pH"], dtype=torch.float32)
+        self.y_N  = torch.tensor(y_dict["N"], dtype=torch.float32)
+        self.y_P  = torch.tensor(np.log1p(y_dict["P"]), dtype=torch.float32)
+        self.y_K  = torch.tensor(np.log1p(y_dict["K"]), dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y_pH[idx], self.y_N[idx], self.y_P[idx], self.y_K[idx], self.y_SOC[idx]
+        return self.X[idx], self.y_pH[idx], self.y_N[idx], self.y_P[idx], self.y_K[idx]
 
-print("✅ Multi-Task ANN model class defined.")''')
+print("✅ 4-Head Multi-Task ANN model class defined.")''')
 
 # -------------------------------------------------------------
 # Cell 13 & 14: Step 6 - Spatial CV
@@ -352,12 +339,11 @@ y_data = {
     "pH": df_ml["pH"].values,
     "N": df_ml["N"].values,
     "P": df_ml["P"].values,
-    "K": df_ml["K"].values,
-    "SOC": df_ml["SOC"].values
+    "K": df_ml["K"].values
 }
 
 gkf = GroupKFold(n_splits=5)
-fold_metrics = {"pH": [], "N": [], "P": [], "K": [], "SOC": []}
+fold_metrics = {"pH": [], "N": [], "P": [], "K": []}
 
 print("=" * 60)
 print("🚀 STARTING 5-FOLD SPATIAL BLOCK CROSS-VALIDATION")
@@ -382,10 +368,10 @@ for fold, (train_idx, val_idx) in enumerate(gkf.split(X_data, y_data["pH"], grou
     # Training Loop
     for epoch in range(80):
         model.train()
-        for x_b, y_ph_b, y_n_b, y_p_b, y_k_b, y_soc_b in train_loader:
+        for x_b, y_ph_b, y_n_b, y_p_b, y_k_b in train_loader:
             x_b = x_b.to(device)
             y_ph_b, y_n_b = y_ph_b.to(device), y_n_b.to(device)
-            y_p_b, y_k_b, y_soc_b = y_p_b.to(device), y_k_b.to(device), y_soc_b.to(device)
+            y_p_b, y_k_b = y_p_b.to(device), y_k_b.to(device)
             
             optimizer.zero_grad()
             preds = model(x_b)
@@ -393,30 +379,28 @@ for fold, (train_idx, val_idx) in enumerate(gkf.split(X_data, y_data["pH"], grou
             loss = (1.0 * criterion(preds["pH"], y_ph_b) +
                     0.5 * criterion(preds["N"], y_n_b) +
                     1.0 * criterion(preds["P"], y_p_b) +
-                    1.0 * criterion(preds["K"], y_k_b) +
-                    1.0 * criterion(preds["SOC"], y_soc_b))
+                    1.0 * criterion(preds["K"], y_k_b))
             loss.backward()
             optimizer.step()
         scheduler.step()
         
     # Evaluation (Invert log scale for P & K)
     model.eval()
-    preds_val = {"pH": [], "N": [], "P": [], "K": [], "SOC": []}
+    preds_val = {"pH": [], "N": [], "P": [], "K": []}
     with torch.no_grad():
-        for x_b, _, _, _, _, _ in val_loader:
+        for x_b, _, _, _, _ in val_loader:
             x_b = x_b.to(device)
             p = model(x_b)
             preds_val["pH"].extend(p["pH"].cpu().numpy())
             preds_val["N"].extend(p["N"].cpu().numpy())
             preds_val["P"].extend(np.expm1(p["P"].cpu().numpy()))
             preds_val["K"].extend(np.expm1(p["K"].cpu().numpy()))
-            preds_val["SOC"].extend(p["SOC"].cpu().numpy())
             
     for k in fold_metrics:
         r2 = r2_score(y_va[k], preds_val[k])
         fold_metrics[k].append(r2)
         
-    print(f"Fold {fold+1}: R² -> pH: {fold_metrics['pH'][-1]:.3f} | N: {fold_metrics['N'][-1]:.3f} | P: {fold_metrics['P'][-1]:.3f} | K: {fold_metrics['K'][-1]:.3f} | SOC: {fold_metrics['SOC'][-1]:.3f}")
+    print(f"Fold {fold+1}: R² -> pH: {fold_metrics['pH'][-1]:.3f} | N: {fold_metrics['N'][-1]:.3f} | P: {fold_metrics['P'][-1]:.3f} | K: {fold_metrics['K'][-1]:.3f}")
 
 print("\n" + "=" * 60)
 print("🎯 FINAL SPATIAL CROSS-VALIDATION MEAN R² SCORES:")
@@ -444,18 +428,17 @@ criterion = nn.MSELoss()
 print("Fitting final production model on full dataset...")
 for epoch in range(100):
     prod_model.train()
-    for x_b, y_ph_b, y_n_b, y_p_b, y_k_b, y_soc_b in full_loader:
+    for x_b, y_ph_b, y_n_b, y_p_b, y_k_b in full_loader:
         x_b = x_b.to(device)
         y_ph_b, y_n_b = y_ph_b.to(device), y_n_b.to(device)
-        y_p_b, y_k_b, y_soc_b = y_p_b.to(device), y_k_b.to(device), y_soc_b.to(device)
+        y_p_b, y_k_b = y_p_b.to(device), y_k_b.to(device)
         
         optimizer.zero_grad()
         p = prod_model(x_b)
         loss = (1.0 * criterion(p["pH"], y_ph_b) +
                 0.5 * criterion(p["N"], y_n_b) +
                 1.0 * criterion(p["P"], y_p_b) +
-                1.0 * criterion(p["K"], y_k_b) +
-                1.0 * criterion(p["SOC"], y_soc_b))
+                1.0 * criterion(p["K"], y_k_b))
         loss.backward()
         optimizer.step()
 
@@ -468,9 +451,9 @@ for path in save_paths:
 # Export metadata JSON
 import json
 metadata = {
-    "model_type": "Presto_MultiTaskSoilANN_5Head",
+    "model_type": "Presto_MultiTaskSoilANN_4Head",
     "input_dim": 128,
-    "targets": ["pH", "Nitrogen", "Phosphorus", "Potassium", "SOC"],
+    "targets": ["pH", "Nitrogen", "Phosphorus", "Potassium"],
     "mean_spatial_cv_r2": {k: float(np.mean(fold_metrics[k])) for k in fold_metrics}
 }
 with open("models/multitask_soil_ann_metadata.json", "w") as f:
@@ -510,18 +493,16 @@ add_code('''def predict_farm_soil_2d(raw_s2_grid, farm_lat, farm_lon, elev=150.0
         preds = prod_model(emb)
         
     # 5. Invert log scale and reshape to 2D
-    grid_pH  = preds["pH"].cpu().numpy().reshape(H, W)
-    grid_N   = np.maximum(0, preds["N"].cpu().numpy().reshape(H, W))
-    grid_P   = np.maximum(0, np.expm1(preds["P"].cpu().numpy().reshape(H, W)))
-    grid_K   = np.maximum(0, np.expm1(preds["K"].cpu().numpy().reshape(H, W)))
-    grid_SOC = np.maximum(0, preds["SOC"].cpu().numpy().reshape(H, W))
+    grid_pH = preds["pH"].cpu().numpy().reshape(H, W)
+    grid_N  = np.maximum(0, preds["N"].cpu().numpy().reshape(H, W))
+    grid_P  = np.maximum(0, np.expm1(preds["P"].cpu().numpy().reshape(H, W)))
+    grid_K  = np.maximum(0, np.expm1(preds["K"].cpu().numpy().reshape(H, W)))
     
     return {
         "pH": grid_pH,
         "Nitrogen": grid_N,
         "Phosphorus": grid_P,
-        "Potassium": grid_K,
-        "SOC": grid_SOC
+        "Potassium": grid_K
     }
 
 print("✅ Complete inference bridge ready for app.py.")''')
