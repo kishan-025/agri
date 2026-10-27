@@ -1,0 +1,29 @@
+{
+  "model_type": "Presto_DecoupledSoilANN_4Head",
+  "architecture": "Decoupled_ResidualMish_UncertaintyLoss",
+  "input_dim": 128,
+  "targets": [
+    "pH",
+    "Nitrogen",
+    "Phosphorus",
+    "Potassium"
+  ],
+  "learned_task_uncertainties": {
+    "pH": 0.5367361307144165,
+    "N": 1.0705792903900146,
+    "P": 0.5079883933067322,
+    "K": 0.44445598125457764
+  },
+  "clipping_bounds": {
+    "P_max": 142.86000000000058,
+    "K_max": 1134.1700000000055
+  },
+  "mean_spatial_cv_r2": {
+    "pH": 0.5261883813645228,
+    "Nitrogen": 0.12025313618084903,
+    "Phosphorus_raw": 0.07773440895501435,
+    "Phosphorus_log": 0.18159426441904217,
+    "Potassium_raw": 0.07716845633731481,
+    "Potassium_log": 0.24570659904857534
+  }
+}

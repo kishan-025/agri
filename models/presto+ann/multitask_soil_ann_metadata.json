@@ -1,0 +1,16 @@
+{
+  "model_type": "Presto_MultiTaskSoilANN_4Head",
+  "input_dim": 128,
+  "targets": [
+    "pH",
+    "Nitrogen",
+    "Phosphorus",
+    "Potassium"
+  ],
+  "mean_spatial_cv_r2": {
+    "pH": 0.5430863651838863,
+    "N": 0.11304820078857017,
+    "P": 0.07712601720432469,
+    "K": 0.087439813136273
+  }
+}

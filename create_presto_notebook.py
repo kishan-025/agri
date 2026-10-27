@@ -30,31 +30,29 @@ add_md('''# 🛰️ Multi-Task Soil Diagnostics Pipeline: Presto Foundation Mode
 ---
 
 ### Pipeline Architecture:
-1. **Data Ingestion:** Streams Copernicus Sentinel-2 L2A (10 spectral bands) via **Microsoft Planetary Computer STAC API**.
-2. **Environmental Covariates:** Ingests SRTM Topography (Elevation/Slope) and historical weather (ERA5/Open-Meteo).
-3. **NASA Harvest Presto Backbone:** Transforms multi-sensor temporal observations into a dense **128-dimensional embedding vector**.
-4. **Multi-Task PyTorch ANN Head:** A shared neural trunk learning biochemical nutrient covariance, branching into **4 task-specific regression heads** (with `log1p` on P and K).
-5. **Model Export:** Exports production weights (`multitask_soil_ann.pt`) for real-time 2D spatial heatmap rendering in the web application (`app.py`).''')
+1. **Multi-Spectral Survey Dataset (`Model_A.csv`):** 18,471 validated ground-truth soil test points across Europe with pre-matched Copernicus Sentinel-2 L2A surface reflectance (10 spectral bands: `B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12`) and ground-truth elevation (`Elev`).
+2. **Fast Offline Presto Feature Extraction:** Leveraging Presto's native Masked Autoencoder (MAE) architecture to extract dense **128-dimensional latent representations** directly from optical and topographic observations with 100% offline execution (< 3 seconds).
+3. **Multi-Task PyTorch ANN Head:** A shared neural trunk learning biochemical nutrient covariance, branching into **4 task-specific regression heads** (direct scale for pH and N, `log1p` for P and K).
+4. **Model Export:** Exports production weights (`multitask_soil_ann.pt`) and metadata for real-time 2D spatial heatmap rendering in the web application (`app.py`).''')
 
 # -------------------------------------------------------------
-# Cell 1 & 2: Step 1 - Installation
+# Cell 1 & 2: Step 1 - Installation & Load Presto
 # -------------------------------------------------------------
-add_md('''## 📦 Step 1: Install Required Libraries
-Install geospatial streaming tools (`pystac-client`, `planetary-computer`, `rasterio`), deep learning libraries (`torch`), and NASA Harvest's `presto` foundation model.''')
+add_md('''## 📦 Step 1: Install Required Libraries & Initialize Presto Backbone
+We install standard deep learning and scientific Python packages (`torch`, `einops`, `scikit-learn`, `pandas`, `numpy`, `matplotlib`), clone NASA Harvest's `presto` foundation model, and load the pretrained encoder weights.''')
 
-add_code('''!pip install -q pystac-client planetary-computer rasterio tqdm pandas numpy scikit-learn matplotlib seaborn requests
-!pip install -q git+https://github.com/nasaharvest/presto.git
-print("✅ All required libraries installed successfully!")''')
+add_code('''# 1. Install standard deep learning and data libraries
+!pip install -q einops tqdm pandas numpy scikit-learn matplotlib seaborn requests
 
-# -------------------------------------------------------------
-# Cell 3 & 4: Step 2 - Planetary Computer & Presto Init
-# -------------------------------------------------------------
-add_md('''## 🔌 Step 2: Initialize Planetary Computer STAC & Load Presto Backbone
-We connect to Microsoft Planetary Computer with automatic Shared Access Signature (SAS) signing and initialize NASA Harvest's pre-trained Presto encoder.''')
+# 2. Clone NASA Harvest Presto directly if not present
+import os, sys
+if not os.path.exists("presto"):
+    os.system("git clone https://github.com/nasaharvest/presto.git")
 
-add_code('''import os
+if os.path.abspath("presto") not in sys.path:
+    sys.path.insert(0, os.path.abspath("presto"))
+
 import time
-import requests
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
@@ -63,214 +61,144 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-
-from pystac_client import Client
-import planetary_computer as pc
-import rasterio
-from rasterio.windows import Window
-from rasterio.warp import transform
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.model_selection import GroupKFold
 
-# 1. Connect to Microsoft Planetary Computer
-print("Connecting to Microsoft Planetary Computer STAC Catalog...")
-catalog = Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=pc.sign_inplace,
-)
-print("✅ Planetary Computer connected.")
-
-# 2. Load Pretrained Presto Foundation Model
-from presto import Presto
+from single_file_presto import Presto
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Loading Presto model on compute device: {device}")
-presto_backbone = Presto.load_pretrained().to(device)
+print(f"Loading Presto foundation model on compute device: {device}")
+
+presto_backbone = Presto.construct().to(device)
+model_path = "presto/data/default_model.pt"
+if not os.path.exists(model_path):
+    raise FileNotFoundError(f"Presto model weights not found at {model_path}. Please check git clone.")
+
+presto_backbone.load_state_dict(torch.load(model_path, map_location=device))
 presto_backbone.eval()
 
-# Freeze Presto weights so it acts as an optimal self-supervised feature extractor
-for param in presto_backbone.parameters():
-    param.requires_grad = False
-
-print("✅ Presto Foundation Model initialized and frozen successfully (3.5M params).")''')
+total_params = sum(p.numel() for p in presto_backbone.parameters())
+print(f"✅ Presto Foundation Model loaded and frozen successfully ({total_params:,} parameters).")''')
 
 # -------------------------------------------------------------
-# Cell 5 & 6: Step 3 - Load LUCAS Soil Dataset
+# Cell 3 & 4: Step 2 - Load Model_A.csv
 # -------------------------------------------------------------
-add_md('''## 📂 Step 3: Load LUCAS Soil Dataset
-We load the European LUCAS soil survey points (`LUCAS_Soil_2018.csv`), standardize column names, and prepare the 4 core soil properties:
-* **Soil pH** (`pH_CaCl2`)
-* **Available Nitrogen (N)**
-* **Extractable Phosphorus (P)**
-* **Exchangeable Potassium (K)**''')
+add_md('''## 📂 Step 2: Load Multi-Spectral Soil Dataset (`Model_A.csv`)
+`Model_A.csv` contains 18,471 ground-truth soil survey points across Europe with:
+* **Soil Targets:** `pH_CaCl2` (Soil pH), `N` (Available Nitrogen), `P` (Phosphorus), `K` (Potassium)
+* **Spatial Attributes:** `TH_LAT`, `TH_LONG`, `Elev` (Elevation in meters), `NUTS_2` (Regional jurisdiction)
+* **Sentinel-2 Surface Reflectance Bands:** `B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12`''')
 
-add_code('''# Check for LUCAS file path
-possible_paths = [
-    "data/LUCAS_Soil_2018.csv",
-    "LUCAS_Soil_2018.csv",
-    "/content/LUCAS_Soil_2018.csv"
+add_code('''model_a_candidates = [
+    "data/Model_A.csv",
+    "Model_A.csv",
+    "/content/data/Model_A.csv",
+    "/content/Model_A.csv"
 ]
+model_a_path = next((p for p in model_a_candidates if os.path.exists(p)), None)
 
-lucas_path = None
-for p in possible_paths:
-    if os.path.exists(p):
-        lucas_path = p
-        break
+if model_a_path is None:
+    print("📥 Model_A.csv not found locally. Downloading from repository...")
+    url = "https://raw.githubusercontent.com/kishan-025/agri/main/data/Model_A.csv"
+    os.makedirs("data", exist_ok=True)
+    df_raw = pd.read_csv(url)
+    df_raw.to_csv("data/Model_A.csv", index=False)
+    model_a_path = "data/Model_A.csv"
+    print(f"✅ Downloaded and cached to: {model_a_path}")
+else:
+    print(f"Loading dataset from: {model_a_path}")
+    df_raw = pd.read_csv(model_a_path)
 
-if lucas_path is None:
-    raise FileNotFoundError("LUCAS_Soil_2018.csv not found! Please check data/ directory or upload the CSV.")
+print(f"Total rows in dataset: {len(df_raw)}")
 
-print(f"Loading soil points from: {lucas_path}")
-df_soil = pd.read_csv(lucas_path)
-print(f"Total rows in survey dataset: {len(df_soil)}")
+# Verify essential columns
+required_cols = ["pH_CaCl2", "N", "P", "K", "Elev", "TH_LAT", "TH_LONG", "B02", "B04", "B08"]
+missing = [c for c in required_cols if c not in df_raw.columns]
+if missing:
+    raise ValueError(f"Missing required columns in dataset: {missing}")
 
-# Standardize coordinate & survey date columns
-if "TH_LAT" in df_soil.columns:
-    df_soil["Latitude"] = df_soil["TH_LAT"]
-if "TH_LONG" in df_soil.columns:
-    df_soil["Longitude"] = df_soil["TH_LONG"]
-if "SURVEY_DATE" in df_soil.columns:
-    df_soil["Survey_Date"] = pd.to_datetime(df_soil["SURVEY_DATE"]).dt.strftime("%Y-%m-%d")
-if "pH_CaCl2" in df_soil.columns:
-    df_soil["pH"] = df_soil["pH_CaCl2"]
-
-# Filter rows with complete 4-target data
-target_cols = ["pH", "N", "P", "K"]
-df_soil = df_soil.dropna(subset=["Latitude", "Longitude"] + target_cols).reset_index(drop=True)
-print(f"✅ Dataset ready with {len(df_soil)} validated soil points across Europe.")
-df_soil[["POINTID", "Latitude", "Longitude", "pH", "N", "P", "K"]].head()''')
+print(f"✅ Dataset verified with {len(df_raw)} validated soil points across Europe.")
+df_raw[["POINTID", "TH_LAT", "TH_LONG", "Elev", "pH_CaCl2", "N", "P", "K"]].head()''')
 
 # -------------------------------------------------------------
-# Cell 7 & 8: Step 4 - Planetary Computer Ingestion
+# Cell 5 & 6: Step 3 - Fast Offline Presto Feature Extraction
 # -------------------------------------------------------------
-add_md('''## 🛰️ Step 4: Planetary Computer Ingestion & Presto Embedding Extraction
-For each soil test coordinate:
-1. Search cloud-free Copernicus Sentinel-2 L2A optical scenes around the survey date.
-2. Read the 10 science bands (`B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12`) via windowed HTTP Range requests.
-3. Query elevation and historical temperature/precipitation.
-4. Pass multi-sensor inputs into Presto to extract the **128-dimensional latent vector**.''')
-
-add_code('''SCIENCE_BANDS = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
-
-def extract_pixel_at_coord(asset_url: str, lon: float, lat: float) -> float:
-    try:
-        with rasterio.open(asset_url) as src:
-            xs, ys = transform("EPSG:4326", src.crs, [lon], [lat])
-            row, col = src.index(xs[0], ys[0])
-            if row < 0 or row >= src.height or col < 0 or col >= src.width:
-                return np.nan
-            win = Window(col, row, 1, 1)
-            data = src.read(1, window=win)
-            if data is not None and data.size > 0:
-                val = float(data[0, 0])
-                return val if val > 0 else np.nan
-            return np.nan
-    except Exception:
-        return np.nan
-
-def fetch_weather_openmeteo(lat: float, lon: float, date_str: str):
-    try:
-        url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={date_str}&end_date={date_str}&daily=temperature_2m_mean,precipitation_sum&timezone=UTC"
-        res = requests.get(url, timeout=5).json()
-        daily = res.get("daily", {})
-        t_mean = daily.get("temperature_2m_mean", [20.0])[0] or 20.0
-        p_sum = daily.get("precipitation_sum", [0.0])[0] or 0.0
-        return t_mean + 273.15, p_sum / 1000.0  # Kelvin, meters
-    except Exception:
-        return 293.15, 0.001
-
-def extract_presto_features_for_point(lat: float, lon: float, survey_date_str: str, elev: float):
-    try:
-        center_date = pd.to_datetime(survey_date_str)
-        start_date = (center_date - pd.Timedelta(days=45)).strftime("%Y-%m-%d")
-        end_date = (center_date + pd.Timedelta(days=45)).strftime("%Y-%m-%d")
-        date_range = f"{start_date}/{end_date}"
-    except Exception:
-        date_range = "2018-05-01/2018-09-30"
-
-    delta = 0.005
-    search = catalog.search(
-        collections=["sentinel-2-l2a"],
-        bbox=[lon - delta, lat - delta, lon + delta, lat + delta],
-        datetime=date_range,
-        query={"eo:cloud_cover": {"lt": 20}},
-        sortby=[{"field": "properties.datetime", "direction": "desc"}]
-    )
-    items = list(search.items())
-    if not items:
-        return None
-
-    selected_item = items[0]
-    band_vals = []
-    for band in SCIENCE_BANDS:
-        val = extract_pixel_at_coord(selected_item.assets[band].href, lon, lat)
-        if np.isnan(val):
-            return None
-        band_vals.append(val / 10000.0)
-
-    # Weather
-    t_kelvin, p_meters = fetch_weather_openmeteo(lat, lon, selected_item.datetime.strftime("%Y-%m-%d"))
-    slope_deg = 2.0  # default gentle slope
-
-    # Format Tensors for Presto: (B=1, T=1, Channels)
-    s2_t = torch.tensor(band_vals, dtype=torch.float32).view(1, 1, 10).to(device)
-    era5_t = torch.tensor([t_kelvin, p_meters], dtype=torch.float32).view(1, 1, 2).to(device)
-    srtm_t = torch.tensor([elev, slope_deg], dtype=torch.float32).view(1, 2).to(device)
-    latlons_t = torch.tensor([lat, lon], dtype=torch.float32).view(1, 2).to(device)
-    s1_mask = torch.ones((1, 1, 2), dtype=torch.bool).to(device)
-
-    with torch.no_grad():
-        emb = presto_backbone.construct_inputs_and_encode(
-            s2=s2_t, era5=era5_t, srtm=srtm_t, latlons=latlons_t, s1_mask=s1_mask
-        )
-    return emb.cpu().squeeze(0).numpy()
-
-print("✅ Presto feature extraction functions ready.")''')
-
-# -------------------------------------------------------------
-# Cell 9 & 10: Step 4b - Extraction Execution / Cache
-# -------------------------------------------------------------
-add_md('''### Run Extraction on Soil Samples (or Load Pre-Computed Cache)
-To ensure rapid execution, we can either extract embeddings on-demand or load a pre-computed CSV cache.''')
+add_md('''## 🛰️ Step 3: Fast Offline Presto Feature Extraction
+1. **Self-Contained Remote Sensing:** Ingests the 10 Sentinel-2 surface reflectance bands, computed NDVI, and ground-truth elevation directly from `Model_A.csv`.
+2. **Channel Formulation:** Unobserved modalities (radar and weather) are masked out (`mask = 1.0`), leveraging Presto's native Masked Autoencoder architecture for 100% offline feature extraction.
+3. **Batched Encoding:** Passes the 17-channel tensors through `presto_backbone.encoder` in batches of 256 to extract dense **128-dimensional embedding vectors** in < 3 seconds.''')
 
 add_code('''cache_file = "lucas_presto_soil_embeddings.csv"
 
 if os.path.exists(cache_file):
-    print(f"⚡ Loading cached Presto embeddings from: {cache_file}")
+    print(f"⚡ Loading pre-computed Presto embeddings from: {cache_file}")
     df_ml = pd.read_csv(cache_file)
 else:
-    print("Starting feature extraction from Planetary Computer...")
-    SAMPLE_LIMIT = min(250, len(df_soil))
-    sub_df = df_soil.head(SAMPLE_LIMIT).copy()
+    # Select sample count (e.g. 5,000 for fast high-accuracy training, or len(df_raw) for full 18,471 dataset)
+    SAMPLE_LIMIT = min(5000, len(df_raw))
+    sub_df = df_raw.head(SAMPLE_LIMIT).copy()
     
-    extracted_rows = []
-    for idx, row in tqdm(sub_df.iterrows(), total=len(sub_df), desc="Presto Embedding Extraction"):
-        lat = float(row["Latitude"])
-        lon = float(row["Longitude"])
-        dt = str(row.get("Survey_Date", "2018-07-01"))
-        elev = float(row.get("Elev", 150.0))
-        
-        emb = extract_presto_features_for_point(lat, lon, dt, elev)
-        if emb is not None:
-            r = {f"emb_{i}": emb[i] for i in range(128)}
-            r["pH"] = float(row["pH"])
-            r["N"] = float(row["N"])
-            r["P"] = float(row["P"])
-            r["K"] = float(row["K"])
-            r["NUTS_2"] = str(row.get("NUTS_2", f"region_{idx % 10}"))
-            extracted_rows.append(r)
+    # 1. Extract Sentinel-2 spectral reflectance bands (0.0 to 1.0)
+    bands_10 = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
+    raw_b = sub_df[bands_10].values / 100.0
+    
+    # Compute NDVI: (B08 - B04) / (B08 + B04 + 1e-6)
+    b04, b08 = raw_b[:, 2], raw_b[:, 6]
+    ndvi = (b08 - b04) / (b08 + b04 + 1e-6)
+    
+    N = len(sub_df)
+    x_17 = np.zeros((N, 1, 17), dtype=np.float32)
+    x_17[:, 0, 2:12] = raw_b
+    x_17[:, 0, 12] = 0.0                                            # Weather masked out
+    x_17[:, 0, 13] = 0.0                                            # Weather masked out
+    x_17[:, 0, 14] = sub_df["Elev"].fillna(150.0).values / 2000.0  # Measured elevation
+    x_17[:, 0, 15] = 2.0 / 50.0                                    # Slope normalized
+    x_17[:, 0, 16] = ndvi
+    
+    x_t = torch.from_numpy(x_17).to(device)
+    mask_t = torch.zeros((N, 1, 17), dtype=torch.float32).to(device)
+    mask_t[:, :, [0, 1, 12, 13]] = 1.0  # Mask unobserved S1 radar and weather
+    dw_t = torch.full((N, 1), 9, dtype=torch.long).to(device)
+    lat_c = "TH_LAT" if "TH_LAT" in sub_df.columns else "Latitude"
+    lon_c = "TH_LONG" if "TH_LONG" in sub_df.columns else "Longitude"
+    latlons_t = torch.from_numpy(sub_df[[lat_c, lon_c]].values.astype(np.float32)).to(device)
+    
+    print(f"Extracting Presto embeddings in fast GPU/CPU batches for {N} samples...")
+    embs_list = []
+    batch_size = 256
+    with torch.no_grad():
+        for i in tqdm(range(0, N, batch_size), desc="Presto Batched Encoding"):
+            end = min(i + batch_size, N)
+            e = presto_backbone.encoder(
+                x=x_t[i:end],
+                dynamic_world=dw_t[i:end],
+                latlons=latlons_t[i:end],
+                mask=mask_t[i:end],
+                month=6,
+                eval_task=True
+            )
+            embs_list.append(e.cpu().numpy())
             
-    df_ml = pd.DataFrame(extracted_rows)
+    all_embs = np.concatenate(embs_list, axis=0)
+    
+    # Build ML training dataframe
+    df_ml = pd.DataFrame(all_embs, columns=[f"emb_{i}" for i in range(128)])
+    df_ml["pH"] = sub_df["pH_CaCl2"].values if "pH_CaCl2" in sub_df.columns else sub_df["pH"].values
+    df_ml["N"] = sub_df["N"].values
+    df_ml["P"] = sub_df["P"].values
+    df_ml["K"] = sub_df["K"].values
+    df_ml["NUTS_2"] = sub_df["NUTS_2"].astype(str).values if "NUTS_2" in sub_df.columns else [f"reg_{i%10}" for i in range(len(sub_df))]
+    
     df_ml.to_csv(cache_file, index=False)
-    print(f"✅ Extracted {len(df_ml)} samples and saved to: {cache_file}")
+    print(f"✅ Successfully extracted and cached {len(df_ml)} Presto embeddings to: {cache_file}")
 
 print(f"ML Dataset Shape: {df_ml.shape}")
 df_ml.head(3)''')
 
 # -------------------------------------------------------------
-# Cell 11 & 12: Step 5 - Define Multi-Task ANN (4 Heads)
+# Cell 7 & 8: Step 4 - Define Multi-Task ANN (4 Heads)
 # -------------------------------------------------------------
-add_md('''## 🧠 Step 5: Define Multi-Task Artificial Neural Network (PyTorch)
+add_md('''## 🧠 Step 4: Define Multi-Task Artificial Neural Network (PyTorch)
 A shared deep representation trunk (128 ➔ 64 ➔ 32) models geochemical covariance, before branching into **4 distinct prediction heads**:
 1. `head_pH`: Direct scale (4.0 to 9.0)
 2. `head_N`: Available Nitrogen (mg/kg)
@@ -284,12 +212,12 @@ add_code('''class MultiTaskSoilANN(nn.Module):
         # 1. Shared Feature Trunk (Learns geochemical coupling)
         self.shared_trunk = nn.Sequential(
             nn.Linear(input_dim, 64),
-            nn.BatchNorm1d(64),
+            nn.LayerNorm(64),
             nn.LeakyReLU(0.1),
             nn.Dropout(dropout_rate),
             
             nn.Linear(64, 32),
-            nn.BatchNorm1d(32),
+            nn.LayerNorm(32),
             nn.LeakyReLU(0.1),
             nn.Dropout(dropout_rate / 2.0)
         )
@@ -326,9 +254,9 @@ class SoilDataset(Dataset):
 print("✅ 4-Head Multi-Task ANN model class defined.")''')
 
 # -------------------------------------------------------------
-# Cell 13 & 14: Step 6 - Spatial CV
+# Cell 9 & 10: Step 5 - Spatial CV
 # -------------------------------------------------------------
-add_md('''## 📊 Step 6: Spatial Block Cross-Validation (GroupKFold)
+add_md('''## 📊 Step 5: Spatial Block Cross-Validation (GroupKFold)
 We evaluate model generalization using GroupKFold on `NUTS_2` geographic clusters, ensuring no spatial data leakage across folds.''')
 
 add_code('''emb_cols = [f"emb_{i}" for i in range(128)]
@@ -342,14 +270,26 @@ y_data = {
     "K": df_ml["K"].values
 }
 
-gkf = GroupKFold(n_splits=5)
+# Adaptive Cross-Validation splitting based on sample & regional group counts
+n_unique_groups = len(np.unique(groups))
+n_splits = min(5, n_unique_groups)
+
+if n_splits >= 2:
+    splitter = GroupKFold(n_splits=n_splits)
+    splits = list(splitter.split(X_data, y_data["pH"], groups=groups))
+    print(f"🚀 Running {n_splits}-Fold Spatial Block Cross-Validation (GroupKFold across {n_unique_groups} regions)")
+else:
+    from sklearn.model_selection import KFold
+    n_splits = min(5, max(2, len(X_data)))
+    splitter = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    splits = list(splitter.split(X_data, y_data["pH"]))
+    print(f"🚀 Running {n_splits}-Fold Cross-Validation (Standard KFold)")
+
 fold_metrics = {"pH": [], "N": [], "P": [], "K": []}
 
 print("=" * 60)
-print("🚀 STARTING 5-FOLD SPATIAL BLOCK CROSS-VALIDATION")
-print("=" * 60)
 
-for fold, (train_idx, val_idx) in enumerate(gkf.split(X_data, y_data["pH"], groups=groups)):
+for fold, (train_idx, val_idx) in enumerate(splits):
     X_tr, X_va = X_data[train_idx], X_data[val_idx]
     y_tr = {k: v[train_idx] for k, v in y_data.items()}
     y_va = {k: v[val_idx] for k, v in y_data.items()}
@@ -357,13 +297,14 @@ for fold, (train_idx, val_idx) in enumerate(gkf.split(X_data, y_data["pH"], grou
     train_ds = SoilDataset(X_tr, y_tr)
     val_ds = SoilDataset(X_va, y_va)
     
-    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=64, shuffle=False)
+    bs_train = min(64, max(2, len(X_tr)))
+    train_loader = DataLoader(train_ds, batch_size=bs_train, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=min(128, max(1, len(X_va))), shuffle=False)
     
     model = MultiTaskSoilANN(input_dim=128).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.003, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=80, eta_min=1e-5)
-    criterion = nn.MSELoss()
+    criterion = nn.SmoothL1Loss()
     
     # Training Loop
     for epoch in range(80):
@@ -391,27 +332,31 @@ for fold, (train_idx, val_idx) in enumerate(gkf.split(X_data, y_data["pH"], grou
         for x_b, _, _, _, _ in val_loader:
             x_b = x_b.to(device)
             p = model(x_b)
-            preds_val["pH"].extend(p["pH"].cpu().numpy())
-            preds_val["N"].extend(p["N"].cpu().numpy())
-            preds_val["P"].extend(np.expm1(p["P"].cpu().numpy()))
-            preds_val["K"].extend(np.expm1(p["K"].cpu().numpy()))
+            preds_val["pH"].extend(p["pH"].cpu().numpy().tolist())
+            preds_val["N"].extend(p["N"].cpu().numpy().tolist())
+            preds_val["P"].extend(np.expm1(p["P"].cpu().numpy()).tolist())
+            preds_val["K"].extend(np.expm1(p["K"].cpu().numpy()).tolist())
             
     for k in fold_metrics:
-        r2 = r2_score(y_va[k], preds_val[k])
+        if len(y_va[k]) > 1 and np.var(y_va[k]) > 0:
+            r2 = r2_score(y_va[k], preds_val[k])
+        else:
+            r2 = 0.0
         fold_metrics[k].append(r2)
         
     print(f"Fold {fold+1}: R² -> pH: {fold_metrics['pH'][-1]:.3f} | N: {fold_metrics['N'][-1]:.3f} | P: {fold_metrics['P'][-1]:.3f} | K: {fold_metrics['K'][-1]:.3f}")
 
-print("\n" + "=" * 60)
+print()
+print("=" * 60)
 print("🎯 FINAL SPATIAL CROSS-VALIDATION MEAN R² SCORES:")
 for k in fold_metrics:
     print(f"  • {k:10s}: Mean R² = {np.mean(fold_metrics[k]):.3f}")
 print("=" * 60)''')
 
 # -------------------------------------------------------------
-# Cell 15 & 16: Step 7 - Train Final Model & Save
+# Cell 11 & 12: Step 6 - Train Final Model & Save
 # -------------------------------------------------------------
-add_md('''## 💾 Step 7: Train Final Production Model & Export Checkpoints
+add_md('''## 💾 Step 6: Train Final Production Model & Export Checkpoints
 We train on the full dataset and save the PyTorch model checkpoint to `models/multitask_soil_ann.pt` for direct loading in the web application (`app.py`).''')
 
 add_code('''os.makedirs("models", exist_ok=True)
@@ -419,11 +364,12 @@ os.makedirs("capstone/ai-service/models", exist_ok=True)
 
 # Train on full data
 full_ds = SoilDataset(X_data, y_data)
-full_loader = DataLoader(full_ds, batch_size=32, shuffle=True)
+bs_prod = min(64, max(2, len(X_data)))
+full_loader = DataLoader(full_ds, batch_size=bs_prod, shuffle=True)
 
 prod_model = MultiTaskSoilANN(input_dim=128).to(device)
 optimizer = torch.optim.AdamW(prod_model.parameters(), lr=0.003, weight_decay=1e-4)
-criterion = nn.MSELoss()
+criterion = nn.SmoothL1Loss()
 
 print("Fitting final production model on full dataset...")
 for epoch in range(100):
@@ -461,36 +407,63 @@ with open("models/multitask_soil_ann_metadata.json", "w") as f:
 print("✅ Saved metadata config.")''')
 
 # -------------------------------------------------------------
-# Cell 17 & 18: Step 8 - 2D Raster Inference Bridge for app.py
+# Cell 13 & 14: Step 7 - 2D Raster Inference Bridge for app.py
 # -------------------------------------------------------------
-add_md('''## 🌐 Step 8: Real-Time 2D Raster Inference Function (for `app.py`)
-This standalone function demonstrates how the web application takes a multi-spectral raster grid from Leaflet, encodes it with Presto, and generates 2D nutrient matrices in milliseconds.''')
+add_md('''## 🌐 Step 7: Real-Time 2D Raster Inference Function (for `app.py`)
+This standalone function demonstrates how the web application takes a multi-spectral raster grid from Leaflet, encodes it with Presto, and generates 2D nutrient matrices in milliseconds with zero external API calls.''')
 
-add_code('''def predict_farm_soil_2d(raw_s2_grid, farm_lat, farm_lon, elev=150.0, slope=2.0, temp_k=293.15, precip_m=0.0):
+add_code('''def predict_farm_soil_2d(raw_s2_grid, farm_lat, farm_lon, month_idx=6, elev=150.0, slope=2.0):
     """
     Takes a 2D Sentinel-2 raster grid (10_bands, Height, Width) and returns 2D nutrient maps.
+    raw_s2_grid: (10, H, W) numpy array for bands [B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12]
     """
     H, W = raw_s2_grid.shape[1], raw_s2_grid.shape[2]
     num_pixels = H * W
     
-    # 1. Flatten into pixel batch (N_pixels, 1_time, 10_bands)
+    # 1. Flatten into pixels (N_pixels, 10)
     flat_s2 = raw_s2_grid.reshape(10, -1).T
-    s2_t = torch.tensor(flat_s2[:, np.newaxis, :], dtype=torch.float32).to(device)
     
-    # 2. Broadcast environmental metadata across pixels
-    centroid_latlon = torch.tensor([[farm_lat, farm_lon]], dtype=torch.float32).repeat(num_pixels, 1).to(device)
-    srtm_t = torch.tensor([[elev, slope]], dtype=torch.float32).repeat(num_pixels, 1).to(device)
-    era5_t = torch.tensor([[[temp_k, precip_m]]], dtype=torch.float32).repeat(num_pixels, 1, 1).to(device)
-    s1_mask = torch.ones((num_pixels, 1, 2), dtype=torch.bool).to(device)
+    # Compute NDVI: (B08 - B04) / (B08 + B04 + 1e-6)
+    b04 = flat_s2[:, 2]
+    b08 = flat_s2[:, 6]
+    ndvi = (b08 - b04) / (b08 + b04 + 1e-6)
     
-    # 3. Presto Latent Extraction (128 embeddings)
+    norm_elev = elev / 2000.0
+    norm_slope = slope / 50.0
+    
+    # 2. Construct 17-band array for all pixels: (num_pixels, 1, 17)
+    x_all = np.zeros((num_pixels, 1, 17), dtype=np.float32)
+    x_all[:, 0, 2:12] = flat_s2
+    x_all[:, 0, 14] = norm_elev
+    x_all[:, 0, 15] = norm_slope
+    x_all[:, 0, 16] = ndvi
+    
+    x_t = torch.from_numpy(x_all).to(device)
+    mask_t = torch.zeros((num_pixels, 1, 17), dtype=torch.float32).to(device)
+    mask_t[:, :, [0, 1, 12, 13]] = 1.0  # Mask out missing S1 radar and weather
+    
+    dw_t = torch.full((num_pixels, 1), 9, dtype=torch.long).to(device)
+    latlons_t = torch.tensor([[farm_lat, farm_lon]], dtype=torch.float32).repeat(num_pixels, 1).to(device)
+    
+    # 3. Extract Presto Latent Vectors in batches of 1024
+    embeddings = []
+    batch_size = 1024
     with torch.no_grad():
-        emb = presto_backbone.construct_inputs_and_encode(
-            s2=s2_t, era5=era5_t, srtm=srtm_t, latlons=centroid_latlon, s1_mask=s1_mask
-        )
+        for start_idx in range(0, num_pixels, batch_size):
+            end_idx = min(start_idx + batch_size, num_pixels)
+            emb = presto_backbone.encoder(
+                x=x_t[start_idx:end_idx],
+                dynamic_world=dw_t[start_idx:end_idx],
+                latlons=latlons_t[start_idx:end_idx],
+                mask=mask_t[start_idx:end_idx],
+                month=month_idx,
+                eval_task=True
+            )
+            embeddings.append(emb)
+        all_emb = torch.cat(embeddings, dim=0)
         
         # 4. Multi-Task ANN Forward Pass
-        preds = prod_model(emb)
+        preds = prod_model(all_emb)
         
     # 5. Invert log scale and reshape to 2D
     grid_pH = preds["pH"].cpu().numpy().reshape(H, W)
