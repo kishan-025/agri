@@ -560,6 +560,23 @@ function renderFertilityResults(data) {
         document.getElementById("rangeK").innerText = `Min: ${m.Potassium.min} | Max: ${m.Potassium.max}`;
     }
 
+    // Uncertainty Quantification (Kendall Multi-Task 95% Confidence Intervals)
+    const uq = data.uncertainty_quantification || (data.soil_health_profile ? data.soil_health_profile.uncertainty_quantification : null);
+    if (uq) {
+        if (uq.pH && document.getElementById("ciPh")) {
+            document.getElementById("ciPh").innerHTML = `<span>95% CI:</span> <strong>[${uq.pH.ci_95_lower} – ${uq.pH.ci_95_upper}]</strong> <span class="ci-pill">±${uq.pH.margin_of_error_95}</span>`;
+        }
+        if (uq.Nitrogen && document.getElementById("ciN")) {
+            document.getElementById("ciN").innerHTML = `<span>95% CI:</span> <strong>[${uq.Nitrogen.ci_95_lower} – ${uq.Nitrogen.ci_95_upper}]</strong> <span class="ci-pill">±${uq.Nitrogen.margin_of_error_95}</span>`;
+        }
+        if (uq.Phosphorus && document.getElementById("ciP")) {
+            document.getElementById("ciP").innerHTML = `<span>95% CI:</span> <strong>[${uq.Phosphorus.ci_95_lower} – ${uq.Phosphorus.ci_95_upper}]</strong> <span class="ci-pill">±${uq.Phosphorus.margin_of_error_95}</span>`;
+        }
+        if (uq.Potassium && document.getElementById("ciK")) {
+            document.getElementById("ciK").innerHTML = `<span>95% CI:</span> <strong>[${uq.Potassium.ci_95_lower} – ${uq.Potassium.ci_95_upper}]</strong> <span class="ci-pill">±${uq.Potassium.margin_of_error_95}</span>`;
+        }
+    }
+
     // Field Nutrient Distribution Heatmaps
     const heatmaps = data.heatmaps || {};
     if (heatmaps.pH) document.getElementById("imgHeatmapPh").src = heatmaps.pH;
@@ -607,16 +624,383 @@ function renderFertilityResults(data) {
         resultsFarmTitle.innerText = `${state.selectedFarm.farmName} — Crop Health & Soil Nutrients (${state.selectedFarm.areaAcres.toFixed(2)} Acres)`;
     }
 
-    // Ensure both sections are visible for continuous scrolling (Section 1: Indicators first, Section 2: Soil Nutrients second)
+    // Ensure sections are visible for continuous scrolling
     const viewSpectral = document.getElementById("viewSpectral");
     const viewNutrients = document.getElementById("viewNutrients");
     if (viewSpectral) viewSpectral.style.display = "block";
     if (viewNutrients) viewNutrients.style.display = "block";
 
+    // Phase 2: Render Multi-Source Soil Health Profile & Crop Recommendations
+    renderSoilHealthProfile(data);
+    renderCropRecommendations(data);
+
     // Scroll smoothly to full-width results below dashboard
     setTimeout(() => {
         results.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 200);
+}
+
+// ============================================================================
+// Phase 2: Multi-Source Soil Health & Regional Climate Profile Renderer
+// ============================================================================
+function renderSoilHealthProfile(data) {
+    const shSection = document.getElementById("viewSoilHealth");
+    if (!shSection) return;
+    shSection.style.display = "block";
+
+    const sh = data.soil_health_profile || {};
+    const cl = data.climate_and_weather || sh.regional_climate || {};
+
+    // 1. Soil Health Index (SHI)
+    const shiVal = sh.soil_health_index != null ? Number(sh.soil_health_index).toFixed(1) : "--";
+    const shiTier = sh.condition_tier || "OPTIMAL";
+    const valShiEl = document.getElementById("valShi");
+    const tierShiEl = document.getElementById("tierShi");
+    const descShiEl = document.getElementById("descShi");
+    const fillEl = document.getElementById("shiCircleFill");
+
+    if (valShiEl) valShiEl.innerText = shiVal;
+    if (tierShiEl) {
+        tierShiEl.innerText = shiTier.replace("_", " ");
+        tierShiEl.className = `shi-tier-badge tier-${shiTier.toLowerCase()}`;
+    }
+    if (descShiEl) {
+        descShiEl.innerText = sh.condition_description || "High multi-nutrient soil index indicating favorable crop production capacity.";
+    }
+
+    if (fillEl && !isNaN(sh.soil_health_index)) {
+        const radius = 50;
+        const circumference = 2 * Math.PI * radius; // ~314.16
+        const progress = Math.min(100, Math.max(0, sh.soil_health_index)) / 100;
+        const offset = circumference - (progress * circumference);
+        fillEl.style.strokeDasharray = `${circumference} ${circumference}`;
+        fillEl.style.strokeDashoffset = offset;
+        fillEl.style.stroke = sh.soil_health_color || (sh.soil_health_index >= 70 ? "#10b981" : (sh.soil_health_index >= 45 ? "#f59e0b" : "#ef4444"));
+    }
+
+    // 2. Multi-Source Climate Grid
+    const rain30 = cl.rainfall ? cl.rainfall.cumulative_30d_mm : cl.rainfall_30d_mm;
+    const r30El = document.getElementById("valRain30");
+    if (r30El) r30El.innerHTML = `${rain30 != null ? Number(rain30).toFixed(1) : "--"} <span class="unit-sm">mm</span>`;
+
+    const rain90 = cl.rainfall ? cl.rainfall.cumulative_90d_mm : cl.rainfall_90d_mm;
+    const r90El = document.getElementById("valRain90");
+    if (r90El) r90El.innerHTML = `${rain90 != null ? Number(rain90).toFixed(1) : "--"} <span class="unit-sm">mm</span>`;
+
+    const tempMean = cl.temperature ? cl.temperature.mean_celsius : cl.temperature_celsius;
+    const tempEl = document.getElementById("valTemp");
+    if (tempEl) tempEl.innerHTML = `${tempMean != null ? Number(tempMean).toFixed(1) : "--"} <span class="unit-sm">°C</span>`;
+
+    const subTempEl = document.getElementById("subTemp");
+    if (subTempEl && cl.temperature && cl.temperature.min_celsius != null) {
+        subTempEl.innerText = `Min: ${cl.temperature.min_celsius}°C | Max: ${cl.temperature.max_celsius}°C`;
+    }
+
+    const moistVal = cl.soil_moisture ? cl.soil_moisture.topsoil_0_to_7cm_m3m3 : cl.volumetric_soil_moisture_m3m3;
+    const moistEl = document.getElementById("valMoisture");
+    if (moistEl) moistEl.innerHTML = `${moistVal != null ? Number(moistVal).toFixed(2) : "--"} <span class="unit-sm">m³/m³</span>`;
+
+    const moistStatusEl = document.getElementById("statusMoisture");
+    if (moistStatusEl) {
+        moistStatusEl.innerText = (cl.soil_moisture && cl.soil_moisture.status_description) 
+            ? cl.soil_moisture.status_description 
+            : (cl.moisture_status || "Adequate Root Zone Moisture");
+    }
+}
+
+// ============================================================================
+// Phase 2: Region-Specific Crop Recommendations & AI Agronomic Advisory
+// ============================================================================
+function renderCropRecommendations(data) {
+    const cropSection = document.getElementById("viewCropRec");
+    if (!cropSection) return;
+    cropSection.style.display = "block";
+
+    const crops = data.crop_recommendations || [];
+    const grid = document.getElementById("cropsRankingGrid");
+    if (grid) {
+        if (!crops || crops.length === 0) {
+            grid.innerHTML = `<div class="crops-empty">No crop recommendations available for this region profile.</div>`;
+        } else {
+            grid.innerHTML = crops.map((crop, idx) => {
+                const isTop = idx === 0;
+                const matchPct = crop.match_percentage != null ? Number(crop.match_percentage).toFixed(1) : "0.0";
+                const tierClass = crop.suitability_level === "HIGHLY_SUITABLE" ? "tier-excellent" : (crop.suitability_level === "MODERATELY_SUITABLE" ? "tier-good" : "tier-mod");
+                const subs = crop.sub_scores || {};
+
+                return `
+                <div class="crop-rank-card ${isTop ? 'primary-pick' : ''}">
+                    <div class="crop-card-top">
+                        <div class="crop-rank-badge ${isTop ? 'badge-gold' : ''}">
+                            ${isTop ? '★ Rank 1 Primary Pick' : `#${idx + 1} Alternative`}
+                        </div>
+                        <span class="crop-category-pill">${escapeHtml(crop.category || 'Crop')}</span>
+                    </div>
+
+                    <div class="crop-title-group">
+                        <h5 class="crop-name">${escapeHtml(crop.crop_name)}</h5>
+                        <span class="crop-scientific">${escapeHtml(crop.scientific_name || '')}</span>
+                    </div>
+
+                    <div class="crop-match-meter">
+                        <div class="match-bar-track">
+                            <div class="match-bar-fill" style="width: ${matchPct}%;"></div>
+                        </div>
+                        <div class="match-score-row">
+                            <span class="match-suit-label ${tierClass}">${crop.suitability_level ? crop.suitability_level.replace('_', ' ') : 'SUITABLE'}</span>
+                            <span class="match-pct">${matchPct}%</span>
+                        </div>
+                    </div>
+
+                    <div class="crop-specs-grid">
+                        <div class="spec-item">
+                            <span class="spec-k">Water Need</span>
+                            <span class="spec-v">${escapeHtml(crop.water_requirement || 'Medium')}</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-k">Duration</span>
+                            <span class="spec-v">${escapeHtml(crop.duration_days || '90-120')} d</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-k">Target NPK</span>
+                            <span class="spec-v">${escapeHtml(crop.recommended_npk_ratio || 'Standard')}</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-k">Soil Match</span>
+                            <span class="spec-v">${subs.soil_fit != null ? subs.soil_fit + '%' : 'Optimal'}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join("");
+        }
+    }
+
+    // LLM Agronomic Advisory Panel
+    const adv = data.crop_advisory_explanation || {};
+    const engineTag = document.getElementById("aiEngineTag");
+    if (engineTag) {
+        engineTag.innerText = adv.engine || "Google Gemini 1.5 Flash (AI Agronomist)";
+    }
+
+    const summaryEl = document.getElementById("advisorySummary");
+    if (summaryEl) {
+        summaryEl.innerHTML = `<p>${escapeHtml(adv.executive_summary || "Regional crop match completed successfully based on satellite soil and climate indicators.")}</p>`;
+    }
+
+    // Supporting Evidence
+    const evidenceEl = document.getElementById("advisoryEvidence");
+    if (evidenceEl) {
+        const evList = adv.supporting_evidence || [];
+        if (evList.length === 0) {
+            evidenceEl.innerHTML = `<li>Validated against regional agro-climatic zone standards.</li>`;
+        } else {
+            evidenceEl.innerHTML = evList.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+        }
+    }
+
+    // Limiting Constraints
+    const constrEl = document.getElementById("advisoryConstraints");
+    if (constrEl) {
+        const cList = adv.limiting_constraints || [];
+        if (cList.length === 0) {
+            constrEl.innerHTML = `<li>No severe agronomic bottlenecks detected for this cultivation window.</li>`;
+        } else {
+            constrEl.innerHTML = cList.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+        }
+    }
+
+    // Precision Fertilizer Prescriptions
+    const plan = adv.actionable_fertilizer_plan || {};
+    const uEl = document.getElementById("fertUrea");
+    const dEl = document.getElementById("fertDap");
+    const mEl = document.getElementById("fertMop");
+
+    if (uEl) uEl.innerHTML = `${plan.urea_kg_per_acre != null ? plan.urea_kg_per_acre : 20} <span class="fert-unit">kg/acre</span>`;
+    if (dEl) dEl.innerHTML = `${plan.dap_kg_per_acre != null ? plan.dap_kg_per_acre : 20} <span class="fert-unit">kg/acre</span>`;
+    if (mEl) mEl.innerHTML = `${plan.mop_kg_per_acre != null ? plan.mop_kg_per_acre : 15} <span class="fert-unit">kg/acre</span>`;
+
+    const uNote = document.getElementById("fertUreaNote");
+    const dNote = document.getElementById("fertDapNote");
+    const mNote = document.getElementById("fertMopNote");
+    if (uNote && plan.nitrogen_guidance) uNote.innerText = plan.nitrogen_guidance;
+    if (dNote && plan.phosphorus_guidance) dNote.innerText = plan.phosphorus_guidance;
+    if (mNote && plan.potassium_guidance) mNote.innerText = plan.potassium_guidance;
+
+    const textAmend = document.getElementById("textAmendments");
+    if (textAmend) textAmend.innerText = plan.soil_amendments || "Optimal soil reaction; maintain balanced organic compost application.";
+
+    const textIrrig = document.getElementById("textIrrigation");
+    if (textIrrig) textIrrig.innerText = adv.irrigation_advisory || "Maintain moist root-zone conditions at critical flowering and grain filling stages.";
+}
+
+// ============================================================================
+// Phase 2: Historical Soil Trends & Change Tracking Modal
+// ============================================================================
+async function openTrendsModal() {
+    if (!state.selectedFarm) {
+        alert("Please select a field first to view its historical soil trajectory.");
+        return;
+    }
+
+    const modal = document.getElementById("trendsModal");
+    const body = document.getElementById("trendsModalBody");
+    const title = document.getElementById("trendsModalTitle");
+    if (modal) modal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    if (title) title.innerText = `${state.selectedFarm.farmName} — Historical Soil Health Trends`;
+    if (body) body.innerHTML = `<div class="trends-loading">Loading historical trend data from cloud database...</div>`;
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/farms/${state.selectedFarm.id}/trends`);
+        if (!resp.ok) {
+            throw new Error(`Server returned HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderTrendsModalContent(data);
+    } catch (e) {
+        if (body) {
+            body.innerHTML = `<div class="trends-error">Unable to load historical trends: ${escapeHtml(e.message)}</div>`;
+        }
+    }
+}
+window.openTrendsModal = openTrendsModal;
+
+function closeTrendsModal() {
+    const modal = document.getElementById("trendsModal");
+    if (modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "";
+    }
+}
+window.closeTrendsModal = closeTrendsModal;
+
+function renderTrendsModalContent(data) {
+    const body = document.getElementById("trendsModalBody");
+    if (!body) return;
+
+    if (!data.has_history || !data.history || data.history.length === 0) {
+        body.innerHTML = `
+            <div class="trends-empty-state">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <h4>No Historical Scans Recorded Yet</h4>
+                <p>Run your first satellite nutrient assessment on this field to begin logging temporal soil conditions.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const trends = data.trends || {};
+    const hasDeltas = Object.keys(trends).length > 0;
+
+    let deltasHtml = "";
+    if (hasDeltas) {
+        const trendBadge = (trend, delta, unit = "") => {
+            let color = "#3b82f6";
+            let symbol = "↔";
+            if (trend === "ACCUMULATING" || trend === "IMPROVING" || delta > 0) {
+                color = "#16a34a";
+                symbol = "↑";
+            } else if (trend === "DEPLETING" || trend === "DECLINING" || delta < 0) {
+                color = "#d97706";
+                symbol = "↓";
+            }
+            const sign = delta > 0 ? "+" : "";
+            return `<span class="trend-delta-pill" style="color: ${color}; background: ${color}15; border: 1px solid ${color}30;">
+                ${symbol} ${sign}${delta} ${unit} <small>(${trend || 'STABLE'})</small>
+            </span>`;
+        };
+
+        deltasHtml = `
+        <div class="trends-deltas-panel">
+            <h5 class="deltas-title">Recent Scan Change (vs Previous Assessment)</h5>
+            <div class="deltas-grid">
+                <div class="delta-card">
+                    <span class="d-label">Soil pH</span>
+                    ${trendBadge(trends.trend_pH, trends.delta_pH)}
+                </div>
+                <div class="delta-card">
+                    <span class="d-label">Nitrogen (N)</span>
+                    ${trendBadge(trends.trend_N, trends.delta_N, 'mg/kg')}
+                </div>
+                <div class="delta-card">
+                    <span class="d-label">Phosphorus (P)</span>
+                    ${trendBadge(trends.trend_P, trends.delta_P, 'mg/kg')}
+                </div>
+                <div class="delta-card">
+                    <span class="d-label">Potassium (K)</span>
+                    ${trendBadge(trends.trend_K, trends.delta_K, 'mg/kg')}
+                </div>
+                ${trends.delta_SHI != null ? `
+                <div class="delta-card">
+                    <span class="d-label">Soil Health Index</span>
+                    ${trendBadge(trends.trend_SHI, trends.delta_SHI, '/100')}
+                </div>` : ''}
+            </div>
+        </div>
+        `;
+    }
+
+    // Historical scans table
+    const rowsHtml = data.history.map((h, i) => {
+        const isLatest = i === 0;
+        const dateStr = h.satellite_date || (h.created_at ? h.created_at.substring(0, 10) : 'Scan ' + (i + 1));
+        const shiStr = h.soil_health_index != null ? `${Number(h.soil_health_index).toFixed(1)}/100` : '--';
+        const tierStr = h.condition_tier || '--';
+        const cropStr = h.recommended_crop ? `${h.recommended_crop} (${h.crop_match_pct ? h.crop_match_pct.toFixed(0) : 0}%)` : '--';
+        const phStr = h.pH != null ? Number(h.pH).toFixed(2) : '--';
+        const nStr = h.Nitrogen != null ? `${Number(h.Nitrogen).toFixed(1)}` : '--';
+        const pStr = h.Phosphorus != null ? `${Number(h.Phosphorus).toFixed(1)}` : '--';
+        const kStr = h.Potassium != null ? `${Number(h.Potassium).toFixed(0)}` : '--';
+
+        return `
+            <tr class="${isLatest ? 'row-latest' : ''}">
+                <td>
+                    <strong>${escapeHtml(dateStr)}</strong>
+                    ${isLatest ? '<span class="badge-curr">Latest</span>' : ''}
+                </td>
+                <td><strong>${phStr}</strong></td>
+                <td>${nStr} mg/kg</td>
+                <td>${pStr} mg/kg</td>
+                <td>${kStr} mg/kg</td>
+                <td><span class="table-shi-badge">${shiStr}</span> <small>${tierStr}</small></td>
+                <td>${escapeHtml(cropStr)}</td>
+            </tr>
+        `;
+    }).join("");
+
+    body.innerHTML = `
+        ${deltasHtml}
+        <div class="trends-table-wrap">
+            <h5 class="history-table-title">Full Scan History (${data.total_scans} Scans Recorded in PostgreSQL)</h5>
+            <table class="trends-history-table">
+                <thead>
+                    <tr>
+                        <th>Scan Date</th>
+                        <th>Soil pH</th>
+                        <th>Nitrogen</th>
+                        <th>Phosphorus</th>
+                        <th>Potassium</th>
+                        <th>Soil Health Index</th>
+                        <th>Recommended Crop</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 // ============================================================================

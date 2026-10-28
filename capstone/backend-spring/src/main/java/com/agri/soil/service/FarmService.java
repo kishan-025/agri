@@ -102,6 +102,83 @@ public class FarmService {
         farmRepository.deleteById(farmId);
     }
 
+    public java.util.Map<String, Object> getSoilTrends(Long farmId) {
+        List<com.agri.soil.entity.FertilityAssessment> list = assessmentRepository.findByFarmIdOrderByCreatedAtDesc(farmId);
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("farm_id", farmId);
+
+        if (list.isEmpty()) {
+            result.put("has_history", false);
+            result.put("total_scans", 0);
+            result.put("history", java.util.Collections.emptyList());
+            result.put("summary", "No historical assessments found. Run a nutrient check to start tracking trends.");
+            return result;
+        }
+
+        result.put("has_history", true);
+        result.put("total_scans", list.size());
+
+        List<java.util.Map<String, Object>> history = new ArrayList<>();
+        for (com.agri.soil.entity.FertilityAssessment fa : list) {
+            java.util.Map<String, Object> item = new java.util.HashMap<>();
+            item.put("assessment_id", fa.getId());
+            item.put("satellite_date", fa.getSatelliteDate());
+            item.put("created_at", fa.getCreatedAt() != null ? fa.getCreatedAt().toString() : null);
+            item.put("pH", fa.getMeanPh());
+            item.put("Nitrogen", fa.getMeanN());
+            item.put("Phosphorus", fa.getMeanP());
+            item.put("Potassium", fa.getMeanK());
+            item.put("soil_health_index", fa.getSoilHealthIndex());
+            item.put("condition_tier", fa.getConditionTier());
+            item.put("rainfall_mm", fa.getRainfallMm());
+            item.put("soil_moisture", fa.getSoilMoisture());
+            item.put("recommended_crop", fa.getRecommendedCrop());
+            item.put("crop_match_pct", fa.getCropMatchPct());
+            history.add(item);
+        }
+        result.put("history", history);
+
+        // Compute deltas if at least 2 scans exist
+        if (list.size() >= 2) {
+            com.agri.soil.entity.FertilityAssessment curr = list.get(0);
+            com.agri.soil.entity.FertilityAssessment prev = list.get(1);
+
+            double dPh = round2((curr.getMeanPh() != null ? curr.getMeanPh() : 0.0) - (prev.getMeanPh() != null ? prev.getMeanPh() : 0.0));
+            double dN = round2((curr.getMeanN() != null ? curr.getMeanN() : 0.0) - (prev.getMeanN() != null ? prev.getMeanN() : 0.0));
+            double dP = round2((curr.getMeanP() != null ? curr.getMeanP() : 0.0) - (prev.getMeanP() != null ? prev.getMeanP() : 0.0));
+            double dK = round2((curr.getMeanK() != null ? curr.getMeanK() : 0.0) - (prev.getMeanK() != null ? prev.getMeanK() : 0.0));
+
+            java.util.Map<String, Object> deltas = new java.util.HashMap<>();
+            deltas.put("delta_pH", dPh);
+            deltas.put("trend_pH", Math.abs(dPh) < 0.2 ? "STABLE" : (dPh > 0 ? "ALKALINIZING" : "ACIDIFYING"));
+
+            deltas.put("delta_N", dN);
+            deltas.put("trend_N", Math.abs(dN) < 0.3 ? "STABLE" : (dN > 0 ? "ACCUMULATING" : "DEPLETING"));
+
+            deltas.put("delta_P", dP);
+            deltas.put("trend_P", Math.abs(dP) < 3.0 ? "STABLE" : (dP > 0 ? "ACCUMULATING" : "DEPLETING"));
+
+            deltas.put("delta_K", dK);
+            deltas.put("trend_K", Math.abs(dK) < 10.0 ? "STABLE" : (dK > 0 ? "ACCUMULATING" : "DEPLETING"));
+
+            if (curr.getSoilHealthIndex() != null && prev.getSoilHealthIndex() != null) {
+                double dShi = round2(curr.getSoilHealthIndex() - prev.getSoilHealthIndex());
+                deltas.put("delta_SHI", dShi);
+                deltas.put("trend_SHI", Math.abs(dShi) < 2.0 ? "STABLE" : (dShi > 0 ? "IMPROVING" : "DECLINING"));
+            }
+
+            result.put("trends", deltas);
+        } else {
+            result.put("trends", java.util.Collections.emptyMap());
+        }
+
+        return result;
+    }
+
+    private double round2(double val) {
+        return Math.round(val * 100.0) / 100.0;
+    }
+
     private FarmResponse mapToResponse(Farm farm) {
         List<List<Double>> corners = new ArrayList<>();
         if (farm.getBoundary() != null) {

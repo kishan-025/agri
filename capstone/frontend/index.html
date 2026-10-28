@@ -368,6 +368,7 @@
                         <div class="nut-val" id="valPh">-</div>
                         <div class="nut-status" id="statusPh">Optimal</div>
                         <div class="nut-range" id="rangePh">Min: - | Max: -</div>
+                        <div class="nut-ci" id="ciPh">95% CI: -</div>
                     </div>
 
                     <div class="nutrient-card card-n">
@@ -375,6 +376,7 @@
                         <div class="nut-val" id="valN">- <span class="sub-unit">mg/kg</span></div>
                         <div class="nut-status" id="statusN">Optimal</div>
                         <div class="nut-range" id="rangeN">Min: - | Max: -</div>
+                        <div class="nut-ci" id="ciN">95% CI: -</div>
                     </div>
 
                     <div class="nutrient-card card-p">
@@ -382,6 +384,7 @@
                         <div class="nut-val" id="valP">- <span class="sub-unit">mg/kg</span></div>
                         <div class="nut-status" id="statusP">Optimal</div>
                         <div class="nut-range" id="rangeP">Min: - | Max: -</div>
+                        <div class="nut-ci" id="ciP">95% CI: -</div>
                     </div>
 
                     <div class="nutrient-card card-k">
@@ -389,6 +392,7 @@
                         <div class="nut-val" id="valK">- <span class="sub-unit">mg/kg</span></div>
                         <div class="nut-status" id="statusK">Optimal</div>
                         <div class="nut-range" id="rangeK">Min: - | Max: -</div>
+                        <div class="nut-ci" id="ciK">95% CI: -</div>
                     </div>
                 </div>
 
@@ -449,6 +453,198 @@
                 </div>
             </div>
 
+            <!-- 3. SECTION: Multi-Source Regional Soil Health & Climate Monitoring -->
+            <div id="viewSoilHealth" class="results-section-block">
+                <div class="section-badge-header">
+                    <span class="badge-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <h4 class="section-title">3. Multi-Source Soil Health &amp; Regional Climate Profile</h4>
+                        <p class="section-subtitle">Regional soil-condition profile integrating satellite features with 30d/90d rainfall, temperature, and topsoil moisture</p>
+                    </div>
+                </div>
+
+                <!-- Soil Health Index Card & Climate Grid -->
+                <div class="shi-climate-container">
+                    <!-- SHI Score Card -->
+                    <div class="shi-score-card">
+                        <div class="shi-card-header">
+                            <h5>Soil Health Index (SHI)</h5>
+                            <span class="topsoil-tag">0–7 cm Root Zone</span>
+                        </div>
+                        <div class="shi-score-display">
+                            <div class="shi-circle-wrap">
+                                <svg class="shi-circle-svg" viewBox="0 0 120 120">
+                                    <circle class="shi-circle-bg" cx="60" cy="60" r="50"/>
+                                    <circle class="shi-circle-fill" id="shiCircleFill" cx="60" cy="60" r="50"/>
+                                </svg>
+                                <div class="shi-circle-content">
+                                    <span class="shi-number" id="valShi">--</span>
+                                    <span class="shi-max">/ 100</span>
+                                </div>
+                            </div>
+                            <div class="shi-info-col">
+                                <div class="shi-tier-badge" id="tierShi">EVALUATING</div>
+                                <p class="shi-desc" id="descShi">Composite multi-indicator fertility and environmental balance assessment.</p>
+                                <div class="shi-trend-quick" id="shiTrendQuick" style="display: none;">
+                                    <span class="trend-icon" id="shiTrendIcon">↑</span>
+                                    <span class="trend-text" id="shiTrendText">Stable Trajectory</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Climate & Moisture 4-Grid -->
+                    <div class="climate-grid">
+                        <div class="climate-card">
+                            <div class="climate-icon-row">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/></svg>
+                                <span class="climate-label">30-Day Rainfall</span>
+                            </div>
+                            <div class="climate-val" id="valRain30">-- <span class="unit-sm">mm</span></div>
+                            <div class="climate-sub">Recent Precipitation</div>
+                        </div>
+
+                        <div class="climate-card">
+                            <div class="climate-icon-row">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+                                <span class="climate-label">90-Day Rainfall</span>
+                            </div>
+                            <div class="climate-val" id="valRain90">-- <span class="unit-sm">mm</span></div>
+                            <div class="climate-sub">Cumulative Seasonal Water</div>
+                        </div>
+
+                        <div class="climate-card">
+                            <div class="climate-icon-row">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>
+                                <span class="climate-label">Air Temperature</span>
+                            </div>
+                            <div class="climate-val" id="valTemp">-- <span class="unit-sm">°C</span></div>
+                            <div class="climate-sub" id="subTemp">Reanalysis Thermal Mean</div>
+                        </div>
+
+                        <div class="climate-card">
+                            <div class="climate-icon-row">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+                                <span class="climate-label">Topsoil Moisture</span>
+                            </div>
+                            <div class="climate-val" id="valMoisture">-- <span class="unit-sm">m³/m³</span></div>
+                            <div class="climate-sub" id="statusMoisture">Root Zone Availability</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sources Strip & Temporal Trend Button -->
+                <div class="shi-bottom-row">
+                    <div class="data-sources-strip">
+                        <span class="sources-title">Verified Sources:</span>
+                        <span class="source-tag">🛰️ Copernicus Sentinel-2 L2A</span>
+                        <span class="source-tag">🧠 Presto EO Foundation Model</span>
+                        <span class="source-tag">🌦️ Open-Meteo &amp; ERA5-Land Reanalysis</span>
+                        <span class="source-tag">📐 Kendall Multi-Task UQ (95% CI)</span>
+                    </div>
+                    <button type="button" class="btn btn-trend-action" id="btnOpenTrends" onclick="openTrendsModal()">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                        <span>View Historical Trends &amp; Changes</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. SECTION: Region-Specific Crop Recommendation & LLM Advisory -->
+            <div id="viewCropRec" class="results-section-block">
+                <div class="section-badge-header">
+                    <span class="badge-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <h4 class="section-title">4. Region-Specific Crop Recommendation &amp; Agronomic Advisory</h4>
+                        <p class="section-subtitle">Multi-criteria fuzzy suitability ranking for documented regional crops, interpreted by AI</p>
+                    </div>
+                </div>
+
+                <!-- Top 5 Ranked Regional Crops Grid -->
+                <div class="crops-ranking-grid" id="cropsRankingGrid">
+                    <!-- Populated dynamically via JS -->
+                </div>
+
+                <!-- LLM Agronomic Explanation Card -->
+                <div class="advisory-panel">
+                    <div class="advisory-panel-header">
+                        <div class="advisory-title-group">
+                            <span class="ai-sparkle">✦</span>
+                            <h5>AI Agronomic Advisory &amp; Nutrient Prescription</h5>
+                        </div>
+                        <span class="ai-engine-tag" id="aiEngineTag">Google Gemini 1.5 Flash</span>
+                    </div>
+
+                    <!-- Executive Summary -->
+                    <div class="advisory-exec-summary" id="advisorySummary">
+                        <!-- Populated via JS -->
+                    </div>
+
+                    <!-- Two-Column Evidence & Constraints -->
+                    <div class="advisory-two-col">
+                        <!-- Column 1: Scientific Supporting Evidence -->
+                        <div class="advisory-col evidence-col">
+                            <h6>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                Agronomic Supporting Evidence
+                            </h6>
+                            <ul class="advisory-list" id="advisoryEvidence">
+                                <!-- Populated via JS -->
+                            </ul>
+                        </div>
+
+                        <!-- Column 2: Soil & Climate Constraints -->
+                        <div class="advisory-col constraints-col">
+                            <h6>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Limiting Constraints to Manage
+                            </h6>
+                            <ul class="advisory-list" id="advisoryConstraints">
+                                <!-- Populated via JS -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Precision Fertilizer Prescription & Schedule -->
+                    <div class="fertilizer-box">
+                        <h6 class="fertilizer-title">Actionable Fertilizer Prescription (Dose per Acre)</h6>
+                        <div class="fertilizer-doses-grid">
+                            <div class="fert-dose-card">
+                                <span class="fert-name">Urea (Nitrogen)</span>
+                                <div class="fert-amount" id="fertUrea">-- <span class="fert-unit">kg/acre</span></div>
+                                <span class="fert-sub" id="fertUreaNote">Vegetative Growth Booster</span>
+                            </div>
+                            <div class="fert-dose-card">
+                                <span class="fert-name">DAP (Phosphorus)</span>
+                                <div class="fert-amount" id="fertDap">-- <span class="fert-unit">kg/acre</span></div>
+                                <span class="fert-sub" id="fertDapNote">Basal Root Stimulator</span>
+                            </div>
+                            <div class="fert-dose-card">
+                                <span class="fert-name">MOP (Potassium)</span>
+                                <div class="fert-amount" id="fertMop">-- <span class="fert-unit">kg/acre</span></div>
+                                <span class="fert-sub" id="fertMopNote">Drought &amp; Grain Vigor</span>
+                            </div>
+                        </div>
+
+                        <div class="advisory-action-notes">
+                            <div class="action-note-item" id="noteAmendments">
+                                <strong>Soil Amendment / Reaction:</strong> <span id="textAmendments">--</span>
+                            </div>
+                            <div class="action-note-item" id="noteIrrigation">
+                                <strong>Moisture &amp; Irrigation Timing:</strong> <span id="textIrrigation">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </section>
 
     </div>
@@ -472,6 +668,26 @@
             </div>
             <div class="fullscreen-modal-body">
                 <img id="fullscreenModalImg" src="" alt="Full Screen Map View">
+            </div>
+        </div>
+    </div>
+
+    <!-- Historical Soil Trends Modal -->
+    <div id="trendsModal" class="fullscreen-modal" style="display: none;">
+        <div class="fullscreen-modal-backdrop" onclick="closeTrendsModal()"></div>
+        <div class="trends-modal-content">
+            <div class="trends-modal-header">
+                <div>
+                    <h3 id="trendsModalTitle">Temporal Soil Health Trajectory</h3>
+                    <p class="trends-modal-subtitle">Tracking change over time across historical satellite assessments</p>
+                </div>
+                <button type="button" class="btn-modal-close" onclick="closeTrendsModal()" title="Close (Esc)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+            <div class="trends-modal-body" id="trendsModalBody">
+                <div class="trends-loading">Loading historical trend data...</div>
             </div>
         </div>
     </div>

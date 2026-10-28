@@ -43,6 +43,12 @@ from scipy.ndimage import zoom
 import torch
 import torch.nn as nn
 
+# Phase 2 Multi-Source Climate, Soil Health, Crop Ranking & LLM Services
+from services.weather_service import fetch_weather_and_soil_moisture
+from services.soil_health_service import compute_soil_health_index, quantify_uncertainty
+from services.crop_recommender import rank_crops_for_region
+from services.llm_explainer import generate_crop_advisory_explanation
+
 # -------------------------------------------------------------
 # Deep Learning Architecture: Presto + Decoupled Soil ANN
 # -------------------------------------------------------------
@@ -167,6 +173,25 @@ class FertilityCheckRequest(BaseModel):
     farm_name: Optional[str] = "My Farm"
     # 4 corner coordinates in order: [[lon1, lat1], [lon2, lat2], [lon3, lat3], [lon4, lat4]]
     corners: List[List[float]] = Field(..., description="Array of 4 [longitude, latitude] coordinate pairs")
+
+class SoilHealthProfileRequest(BaseModel):
+    lat: float = Field(..., description="Latitude coordinate")
+    lon: float = Field(..., description="Longitude coordinate")
+    ph: Optional[float] = 6.5
+    nitrogen: Optional[float] = 2.5
+    phosphorus: Optional[float] = 30.0
+    potassium: Optional[float] = 120.0
+    ndvi: Optional[float] = 0.35
+
+class CropRecommendationRequest(BaseModel):
+    lat: float = Field(..., description="Latitude coordinate")
+    lon: float = Field(..., description="Longitude coordinate")
+    ph: float = Field(..., description="Soil pH value")
+    nitrogen: float = Field(..., description="Available Nitrogen (mg/kg)")
+    phosphorus: float = Field(..., description="Extractable Phosphorus (mg/kg)")
+    potassium: float = Field(..., description="Exchangeable Potassium (mg/kg)")
+    farm_name: Optional[str] = "Agricultural Plot"
+    top_k: Optional[int] = 5
 
 # -------------------------------------------------------------
 # Helper: Generate Base64 Color Heatmap with Transparent Background
@@ -565,6 +590,65 @@ def run_fertility_check(req: FertilityCheckRequest):
         )
     }
 
+    # 9. Multi-Source Climate, Volumetric Soil Moisture & Seasonal Dynamics (Requirement 2)
+    farm_center_lon, farm_center_lat = farm_poly.centroid.x, farm_poly.centroid.y
+    weather_data = fetch_weather_and_soil_moisture(farm_center_lat, farm_center_lon, scene_date)
+    topsoil_sm = weather_data.get("soil_moisture", {}).get("topsoil_0_to_7cm_m3m3", 0.22)
+    rain_30d = weather_data.get("rainfall", {}).get("cumulative_30d_mm", 60.0)
+    rain_90d = weather_data.get("rainfall", {}).get("cumulative_90d_mm", 300.0)
+    mean_temp = weather_data.get("temperature", {}).get("mean_celsius", 25.0)
+    active_season = weather_data.get("query_period", {}).get("season", "Kharif")
+
+    # 10. Composite Soil Health Index (SHI, 0-100) (Requirement 2)
+    soil_health = compute_soil_health_index(
+        ph=float(metrics_summary["pH"]["mean"]),
+        n=float(metrics_summary["Nitrogen"]["mean"]),
+        p=float(metrics_summary["Phosphorus"]["mean"]),
+        k=float(metrics_summary["Potassium"]["mean"]),
+        topsoil_moisture_m3m3=topsoil_sm,
+        ndvi=float(np.mean(ndvi[valid_mask]))
+    )
+
+    # 11. Uncertainty Quantification (UQ: 95% Confidence Intervals) (Requirement 2)
+    uncertainty_dict = {}
+    for t in ["pH", "Nitrogen", "Phosphorus", "Potassium"]:
+        uncertainty_dict[t] = quantify_uncertainty(
+            metric_name=t,
+            mean_val=float(metrics_summary[t]["mean"]),
+            field_std=float(metrics_summary[t]["std"]),
+            pixel_count=int(np.sum(valid_mask)),
+            cloud_cover_pct=cloud_cover
+        )
+
+    # 12. Region-Specific Crop Ranking Engine (Requirement 3)
+    ranked_crops = rank_crops_for_region(
+        ph=float(metrics_summary["pH"]["mean"]),
+        n=float(metrics_summary["Nitrogen"]["mean"]),
+        p=float(metrics_summary["Phosphorus"]["mean"]),
+        k=float(metrics_summary["Potassium"]["mean"]),
+        rainfall_seasonal_mm=rain_90d,
+        mean_temp_celsius=mean_temp,
+        topsoil_moisture_m3m3=topsoil_sm,
+        active_season=active_season,
+        top_k=5
+    )
+
+    # 13. LLM Agronomic Explanation & Fertilizer Advisory (Requirement 3)
+    top_crop_candidate = ranked_crops[0] if ranked_crops else {}
+    crop_advisory = generate_crop_advisory_explanation(
+        top_crop=top_crop_candidate,
+        ph=float(metrics_summary["pH"]["mean"]),
+        n=float(metrics_summary["Nitrogen"]["mean"]),
+        p=float(metrics_summary["Phosphorus"]["mean"]),
+        k=float(metrics_summary["Potassium"]["mean"]),
+        topsoil_moisture_m3m3=topsoil_sm,
+        rainfall_30d_mm=rain_30d,
+        rainfall_90d_mm=rain_90d,
+        mean_temp_celsius=mean_temp,
+        active_season=active_season,
+        farm_name=req.farm_name or "Agricultural Plot"
+    )
+
     return {
         "status": "SUCCESS",
         "engine_type": engine_type,
@@ -590,7 +674,66 @@ def run_fertility_check(req: FertilityCheckRequest):
         "metrics": metrics_summary,
         "heatmaps": heatmaps_b64,
         "spectral_metrics": spectral_metrics,
-        "spectral_heatmaps": spectral_heatmaps_b64
+        "spectral_heatmaps": spectral_heatmaps_b64,
+        # Phase 2 Deliverables:
+        "soil_health_profile": soil_health,
+        "uncertainty_quantification": uncertainty_dict,
+        "climate_and_weather": weather_data,
+        "crop_recommendations": ranked_crops,
+        "crop_advisory_explanation": crop_advisory
+    }
+
+# -------------------------------------------------------------
+# Standalone Dedicated Phase 2 Endpoints
+# -------------------------------------------------------------
+@app.post("/api/soil-health-profile")
+def get_soil_health_profile(req: SoilHealthProfileRequest):
+    weather_data = fetch_weather_and_soil_moisture(req.lat, req.lon)
+    topsoil_sm = weather_data.get("soil_moisture", {}).get("topsoil_0_to_7cm_m3m3", 0.22)
+    shi = compute_soil_health_index(
+        ph=req.ph, n=req.nitrogen, p=req.phosphorus, k=req.potassium,
+        topsoil_moisture_m3m3=topsoil_sm, ndvi=req.ndvi
+    )
+    uq = {
+        "pH": quantify_uncertainty("pH", req.ph, 0.2, 100),
+        "Nitrogen": quantify_uncertainty("Nitrogen", req.nitrogen, 0.3, 100),
+        "Phosphorus": quantify_uncertainty("Phosphorus", req.phosphorus, 5.0, 100),
+        "Potassium": quantify_uncertainty("Potassium", req.potassium, 15.0, 100)
+    }
+    return {
+        "status": "SUCCESS",
+        "soil_health": shi,
+        "uncertainty": uq,
+        "climate": weather_data
+    }
+
+@app.post("/api/crop-recommendations")
+def get_crop_recommendations(req: CropRecommendationRequest):
+    weather_data = fetch_weather_and_soil_moisture(req.lat, req.lon)
+    rain_90d = weather_data.get("rainfall", {}).get("cumulative_90d_mm", 300.0)
+    rain_30d = weather_data.get("rainfall", {}).get("cumulative_30d_mm", 60.0)
+    temp = weather_data.get("temperature", {}).get("mean_celsius", 25.0)
+    topsoil_sm = weather_data.get("soil_moisture", {}).get("topsoil_0_to_7cm_m3m3", 0.22)
+    season = weather_data.get("query_period", {}).get("season", "Kharif")
+    
+    ranked = rank_crops_for_region(
+        ph=req.ph, n=req.nitrogen, p=req.phosphorus, k=req.potassium,
+        rainfall_seasonal_mm=rain_90d, mean_temp_celsius=temp,
+        topsoil_moisture_m3m3=topsoil_sm, active_season=season,
+        top_k=req.top_k or 5
+    )
+    advisory = generate_crop_advisory_explanation(
+        top_crop=ranked[0] if ranked else {},
+        ph=req.ph, n=req.nitrogen, p=req.phosphorus, k=req.potassium,
+        topsoil_moisture_m3m3=topsoil_sm, rainfall_30d_mm=rain_30d,
+        rainfall_90d_mm=rain_90d, mean_temp_celsius=temp,
+        active_season=season, farm_name=req.farm_name or "Agricultural Plot"
+    )
+    return {
+        "status": "SUCCESS",
+        "ranked_crops": ranked,
+        "advisory": advisory,
+        "climate_context": weather_data
     }
 
 if __name__ == "__main__":

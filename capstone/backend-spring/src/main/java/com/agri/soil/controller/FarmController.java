@@ -67,4 +67,15 @@ public class FarmController {
                     .body(Map.of("error", "Fertility check error: " + e.getMessage()));
         }
     }
+
+    @GetMapping("/{id}/trends")
+    public ResponseEntity<?> getFarmSoilTrends(@PathVariable Long id) {
+        try {
+            Map<String, Object> trends = farmService.getSoilTrends(id);
+            return ResponseEntity.ok(trends);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to retrieve soil trends: " + e.getMessage()));
+        }
+    }
 }

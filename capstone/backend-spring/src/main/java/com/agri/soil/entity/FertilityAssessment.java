@@ -50,6 +50,23 @@ public class FertilityAssessment {
     @Column(columnDefinition = "TEXT")
     private String heatmapJson;
 
+    // Phase 2: Soil Health Profile & Multi-Source Climate (Requirement 2)
+    private Double soilHealthIndex;
+    private String conditionTier;
+    private Double rainfallMm;
+    private Double temperatureCelsius;
+    private Double soilMoisture;
+
+    // Phase 2: Region-Specific Crop Recommendation & LLM Advisory (Requirement 3)
+    private String recommendedCrop;
+    private Double cropMatchPct;
+
+    @Column(columnDefinition = "TEXT")
+    private String cropAdvisoryJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String climateJson;
+
     @Builder.Default
     private ZonedDateTime createdAt = ZonedDateTime.now();
 }
