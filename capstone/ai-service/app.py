@@ -2,7 +2,8 @@
 Soil Fertility AI Microservice
 Port: 7000
 Streams Copernicus Sentinel-2 L2A bands via Microsoft Planetary Computer STAC
-Uses ultra-fast windowed COG reading & polygon masking, then evaluates 4 trained XGBoost models:
+Uses ultra-fast windowed COG reading & polygon masking, then evaluates NASA Harvest Presto
+Foundation Model (128-d latent representation) with Decoupled Residual Mish Multi-Nutrient ANN:
 Soil pH, Available Nitrogen (N), Extractable Phosphorus (P), Exchangeable Potassium (K).
 """
 
@@ -37,7 +38,6 @@ from rasterio.windows import from_bounds
 import rasterio.features
 import planetary_computer as pc
 from pystac_client import Client
-import xgboost as xgb
 from scipy.ndimage import zoom
 
 import torch
@@ -106,24 +106,19 @@ app = FastAPI(
 # -------------------------------------------------------------
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 
-models: Dict[str, Any] = {}
-feature_names: List[str] = []
-evaluation_metrics: Dict[str, Any] = {}
-
 device = torch.device("cpu")
 presto_backbone: Optional[Any] = None
 decoupled_ann: Optional[DecoupledSoilANN] = None
-engine_type: str = "XGBOOST"
+engine_type: str = "PRESTO_DECOUPLED_ANN"
 p_clip_bound: float = 142.86
 k_clip_bound: float = 1134.17
 model_metadata: Dict[str, Any] = {}
 
 @app.on_event("startup")
 def load_artifacts():
-    global models, feature_names, evaluation_metrics
     global presto_backbone, decoupled_ann, engine_type, p_clip_bound, k_clip_bound, model_metadata
     
-    # 1. Attempt Loading Presto + Decoupled Neural Network
+    # 1. Load Presto Foundation Model + Decoupled Neural Network
     ann_weights_path = os.path.join(MODEL_DIR, "decoupled_soil_ann.pt")
     ann_meta_path = os.path.join(MODEL_DIR, "decoupled_soil_ann_metadata.json")
     presto_weights_path = os.path.join(os.path.dirname(__file__), "presto", "data", "default_model.pt")
@@ -158,33 +153,11 @@ def load_artifacts():
             engine_type = "PRESTO_DECOUPLED_ANN"
             print("[OK] Active AI Engine: Presto (128-d) + Decoupled Multi-Nutrient Neural Network")
         except Exception as e:
-            print(f"[WARN] Failed to initialize Presto+ANN: {str(e)}. Falling back to XGBoost.")
-            engine_type = "XGBOOST"
-            
-    # 2. Load Fallback XGBoost Models
-    targets = ["pH", "Nitrogen", "Phosphorus", "Potassium"]
-    for t in targets:
-        model_path = os.path.join(MODEL_DIR, f"xgboost_{t}.json")
-        if os.path.exists(model_path):
-            bst = xgb.Booster()
-            bst.load_model(model_path)
-            models[t] = bst
-            print(f"[OK] Loaded XGBoost model for: {t}")
-        else:
-            print(f"[WARN] Warning: XGBoost model not found at {model_path}")
-            
-    # Load feature names
-    feat_path = os.path.join(MODEL_DIR, "feature_names.json")
-    if os.path.exists(feat_path):
-        with open(feat_path, "r", encoding="utf-8") as f:
-            feature_names = json.load(f)
-        print(f"[OK] Loaded {len(feature_names)} features contract.")
-
-    # Load metrics summary
-    metrics_path = os.path.join(MODEL_DIR, "evaluation_metrics.json")
-    if os.path.exists(metrics_path):
-        with open(metrics_path, "r", encoding="utf-8") as f:
-            evaluation_metrics = json.load(f)
+            print(f"[ERROR] Failed to initialize Presto+ANN: {str(e)}")
+            engine_type = "UNAVAILABLE"
+    else:
+        print(f"[ERROR] Required model files not found: {ann_weights_path} or {presto_weights_path}")
+        engine_type = "UNAVAILABLE"
 
 # -------------------------------------------------------------
 # Pydantic Request Models
@@ -234,20 +207,24 @@ def render_heatmap_base64(data_2d: np.ndarray, cmap_name: str, vmin: float, vmax
 # -------------------------------------------------------------
 @app.get("/health")
 def health():
+    is_ready = (engine_type == "PRESTO_DECOUPLED_ANN" and presto_backbone is not None and decoupled_ann is not None)
     return {
-        "status": "UP",
+        "status": "UP" if is_ready else "DOWN",
         "service": "Soil Fertility AI Satellite Engine",
         "port": 7000,
         "engine_type": engine_type,
-        "foundation_backbone": "NASA Harvest Presto (128-d Latent Representation)" if engine_type == "PRESTO_DECOUPLED_ANN" else "None",
-        "neural_head": "Decoupled Residual Mish Multi-Nutrient Head" if engine_type == "PRESTO_DECOUPLED_ANN" else "XGBoost Gradient Boosted Trees",
-        "models_loaded": ["pH", "Nitrogen", "Phosphorus", "Potassium"],
-        "clipping_bounds": {"P_max": p_clip_bound, "K_max": k_clip_bound} if engine_type == "PRESTO_DECOUPLED_ANN" else {},
-        "expected_features": ["Sentinel-2 10 Bands (B02-B12)", "NDVI", "Elevation", "Slope"] if engine_type == "PRESTO_DECOUPLED_ANN" else feature_names
+        "foundation_backbone": "NASA Harvest Presto (128-d Latent Representation)",
+        "neural_head": "Decoupled Residual Mish Multi-Nutrient Head",
+        "models_loaded": ["pH", "Nitrogen", "Phosphorus", "Potassium"] if is_ready else [],
+        "clipping_bounds": {"P_max": p_clip_bound, "K_max": k_clip_bound},
+        "expected_features": ["Sentinel-2 10 Bands (B02-B12)", "NDVI", "Elevation", "Slope"]
     }
 
 @app.post("/api/fertility-check")
 def run_fertility_check(req: FertilityCheckRequest):
+    if engine_type != "PRESTO_DECOUPLED_ANN" or presto_backbone is None or decoupled_ann is None:
+        raise HTTPException(status_code=503, detail="Soil AI Presto+ANN inference engine is not ready or failed to load.")
+
     if len(req.corners) != 4:
         raise HTTPException(status_code=400, detail="Exactly 4 corner coordinates [[lon, lat], ...] are required.")
     
@@ -414,110 +391,75 @@ def run_fertility_check(req: FertilityCheckRequest):
         surface_status = "WARNING"
         surface_warning = "The selected boundary exhibits low soil mineral absorption and non-agricultural spectral response. Results may be uncalibrated."
 
-    # Build feature columns dictionary in exact trained order
-    features_dict = {
-        "B02": b2, "B03": b3, "B04": b4, "B05": b5, "B06": b6,
-        "B07": b7, "B08": b8, "B8A": b8a, "B11": b11, "B12": b12,
-        "NDVI": ndvi, "BSI": bsi, "Clay_Ratio": clay_ratio,
-        "Ferric_Iron": ferric_iron, "Carbonate_Index": carbonate_index,
-        "NDRE": ndre, "Soil_Brightness": soil_brightness, "Elev": elev
-    }
-    
-    # 6. Run Inference for all 4 Nutrients (Presto + Decoupled ANN or XGBoost)
+    # 6. Run Inference for all 4 Nutrients via NASA Harvest Presto + Decoupled ANN
     nutrients_2d: Dict[str, np.ndarray] = {}
     metrics_summary: Dict[str, Any] = {}
     num_valid = int(np.sum(valid_mask))
 
-    run_xgboost_fallback = False
-    if engine_type == "PRESTO_DECOUPLED_ANN" and presto_backbone is not None and decoupled_ann is not None:
-        try:
-            bands_10_names = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
-            raw_b = np.column_stack([band_arrays[b][valid_mask] for b in bands_10_names])
+    try:
+        bands_10_names = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
+        raw_b = np.column_stack([band_arrays[b][valid_mask] for b in bands_10_names])
+        
+        x_17 = np.zeros((num_valid, 1, 17), dtype=np.float32)
+        x_17[:, 0, 2:12] = raw_b
+        x_17[:, 0, 14] = 150.0 / 2000.0  # Normalized elevation
+        x_17[:, 0, 15] = 2.0 / 50.0      # Normalized slope
+        x_17[:, 0, 16] = ndvi[valid_mask]
+        
+        x_t = torch.from_numpy(x_17).to(device)
+        mask_t = torch.zeros((num_valid, 1, 17), dtype=torch.float32).to(device)
+        mask_t[:, :, [0, 1, 12, 13]] = 1.0  # Mask unobserved radar and weather
+        dw_t = torch.full((num_valid, 1), 9, dtype=torch.long).to(device)
+        
+        farm_center_lon, farm_center_lat = farm_poly.centroid.x, farm_poly.centroid.y
+        latlons_t = torch.tensor([[farm_center_lat, farm_center_lon]], dtype=torch.float32).repeat(num_valid, 1).to(device)
+        scene_month = selected_scene.datetime.month
+        
+        with torch.no_grad():
+            embs_list = []
+            chunk_size = 1024
+            for i in range(0, num_valid, chunk_size):
+                end_i = min(i + chunk_size, num_valid)
+                e = presto_backbone.encoder(
+                    x=x_t[i:end_i],
+                    dynamic_world=dw_t[i:end_i],
+                    latlons=latlons_t[i:end_i],
+                    mask=mask_t[i:end_i],
+                    month=scene_month,
+                    eval_task=True
+                )
+                embs_list.append(e)
+            all_embs = torch.cat(embs_list, dim=0)
+            preds_dict = decoupled_ann(all_embs)
             
-            x_17 = np.zeros((num_valid, 1, 17), dtype=np.float32)
-            x_17[:, 0, 2:12] = raw_b
-            x_17[:, 0, 14] = 150.0 / 2000.0  # Normalized elevation
-            x_17[:, 0, 15] = 2.0 / 50.0      # Normalized slope
-            x_17[:, 0, 16] = ndvi[valid_mask]
-            
-            x_t = torch.from_numpy(x_17).to(device)
-            mask_t = torch.zeros((num_valid, 1, 17), dtype=torch.float32).to(device)
-            mask_t[:, :, [0, 1, 12, 13]] = 1.0  # Mask unobserved radar and weather
-            dw_t = torch.full((num_valid, 1), 9, dtype=torch.long).to(device)
-            
-            farm_center_lon, farm_center_lat = farm_poly.centroid.x, farm_poly.centroid.y
-            latlons_t = torch.tensor([[farm_center_lat, farm_center_lon]], dtype=torch.float32).repeat(num_valid, 1).to(device)
-            scene_month = selected_scene.datetime.month
-            
-            with torch.no_grad():
-                embs_list = []
-                chunk_size = 1024
-                for i in range(0, num_valid, chunk_size):
-                    end_i = min(i + chunk_size, num_valid)
-                    e = presto_backbone.encoder(
-                        x=x_t[i:end_i],
-                        dynamic_world=dw_t[i:end_i],
-                        latlons=latlons_t[i:end_i],
-                        mask=mask_t[i:end_i],
-                        month=scene_month,
-                        eval_task=True
-                    )
-                    embs_list.append(e)
-                all_embs = torch.cat(embs_list, dim=0)
-                preds_dict = decoupled_ann(all_embs)
-                
-            preds_pH = np.clip(preds_dict["pH"].cpu().numpy(), 3.5, 9.5)
-            preds_N  = np.maximum(0.0, preds_dict["N"].cpu().numpy())
-            preds_P  = np.clip(np.expm1(preds_dict["P"].cpu().numpy()), 0.0, p_clip_bound)
-            preds_K  = np.clip(np.expm1(preds_dict["K"].cpu().numpy()), 0.0, k_clip_bound)
-            
-            pred_map = {
-                "pH": preds_pH,
-                "Nitrogen": preds_N,
-                "Phosphorus": preds_P,
-                "Potassium": preds_K
-            }
-            
-            for t in ["pH", "Nitrogen", "Phosphorus", "Potassium"]:
-                p = pred_map[t]
-                grid_2d = np.full(reference_shape, np.nan)
-                grid_2d[valid_mask] = p
-                nutrients_2d[t] = grid_2d
-                
-                metrics_summary[t] = {
-                    "mean": round(float(np.mean(p)), 2),
-                    "min": round(float(np.min(p)), 2),
-                    "max": round(float(np.max(p)), 2),
-                    "std": round(float(np.std(p)), 2),
-                    "unit": "pH units" if t == "pH" else "mg/kg"
-                }
-        except Exception as e:
-            print(f"[ERROR] Presto forward pass failed: {str(e)}. Falling back to XGBoost.")
-            run_xgboost_fallback = True
-    else:
-        run_xgboost_fallback = True
-
-    if run_xgboost_fallback:
-        feature_matrix = np.column_stack([features_dict[col][valid_mask] for col in feature_names])
-        dmatrix = xgb.DMatrix(feature_matrix, feature_names=feature_names)
-        for t, model in models.items():
-            preds = model.predict(dmatrix)
-            if t == "pH":
-                preds = np.clip(preds, 3.5, 9.5)
-            else:
-                preds = np.clip(preds, 0.0, None)
-                
+        preds_pH = np.clip(preds_dict["pH"].cpu().numpy(), 3.5, 9.5)
+        preds_N  = np.maximum(0.0, preds_dict["N"].cpu().numpy())
+        preds_P  = np.clip(np.expm1(preds_dict["P"].cpu().numpy()), 0.0, p_clip_bound)
+        preds_K  = np.clip(np.expm1(preds_dict["K"].cpu().numpy()), 0.0, k_clip_bound)
+        
+        pred_map = {
+            "pH": preds_pH,
+            "Nitrogen": preds_N,
+            "Phosphorus": preds_P,
+            "Potassium": preds_K
+        }
+        
+        for t in ["pH", "Nitrogen", "Phosphorus", "Potassium"]:
+            p = pred_map[t]
             grid_2d = np.full(reference_shape, np.nan)
-            grid_2d[valid_mask] = preds
+            grid_2d[valid_mask] = p
             nutrients_2d[t] = grid_2d
             
             metrics_summary[t] = {
-                "mean": round(float(np.mean(preds)), 2),
-                "min": round(float(np.min(preds)), 2),
-                "max": round(float(np.max(preds)), 2),
-                "std": round(float(np.std(preds)), 2),
+                "mean": round(float(np.mean(p)), 2),
+                "min": round(float(np.min(p)), 2),
+                "max": round(float(np.max(p)), 2),
+                "std": round(float(np.std(p)), 2),
                 "unit": "pH units" if t == "pH" else "mg/kg"
             }
+    except Exception as e:
+        print(f"[ERROR] Presto forward pass failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Presto soil inference failed: {str(e)}")
 
     # Helper function for adaptive percentile bounds (prevents flat color wash)
     def get_bounds(arr_masked, default_min, default_max):
@@ -626,7 +568,7 @@ def run_fertility_check(req: FertilityCheckRequest):
     return {
         "status": "SUCCESS",
         "engine_type": engine_type,
-        "model_engine": "NASA Harvest Presto (128-d) + Decoupled Residual Mish ANN" if engine_type == "PRESTO_DECOUPLED_ANN" else "XGBoost 4-Target Forest",
+        "model_engine": "NASA Harvest Presto (128-d) + Decoupled Residual Mish ANN",
         "farm_id": req.farm_id,
         "farm_name": req.farm_name,
         "satellite_date": scene_date,
